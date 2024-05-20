@@ -1,0 +1,42 @@
+#include "BasicDataType.idl"
+#include "ExtendedDataTypes.idl"
+
+module contact_state_rtc
+{
+  interface TactileOdometryService
+  {
+    struct TactileOdometryParam
+    {
+      // hoge
+      RTC::TimedDoubleSeq hoge;
+    };
+
+    /**
+     * @brief Set TactileOdometry parameters
+     * @param i_param is input parameter
+     * @return true if set successfully, false otherwise
+     */
+    boolean setTactileOdometryParam(in TactileOdometryParam i_param);
+
+    /**
+     * @brief Get TactileOdometry parameters.
+     * @param i_param is output parameters
+     * @return true if set successfully, false otherwise
+     */
+    boolean getTactileOdometryParam(out TactileOdometryParam o_param);
+
+    /**
+     * @brief Set position of robot's root link.
+     * @param pose is input position (world frame)
+     * @return true if set successfully, false otherwise
+     */
+    boolean setRobotPos(in RTC::Point3D pos);
+
+    /**
+     * @brief Set pose of robot's root link.
+     * @param pose is input pose (world frame)
+     * @return true if set successfully, false otherwise
+     */
+    boolean setRobotPose(in RTC::Pose3D pose);
+  };
+};
