@@ -5,3 +5,11 @@
     local-name: choreonoid
     uri: https://github.com/choreonoid/choreonoid.git
     version: release-2.1
+- git:
+    local-name: eigen_rtm_conversions
+    uri: https://github.com/Naoki-Hiraoka/eigen_rtm_conversions.git
+    version: 1.0
+- git:
+    local-name: cpp_filters
+    uri: https://github.com/Naoki-Hiraoka/cpp_filters.git
+

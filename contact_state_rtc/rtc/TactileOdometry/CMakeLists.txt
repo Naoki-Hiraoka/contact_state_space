@@ -3,6 +3,8 @@
 add_definitions(-Wno-deprecated)
 
 find_package(catkin REQUIRED COMPONENTS
+  eigen_rtm_conversions
+  cpp_filters
   )
 
 find_package(PkgConfig)

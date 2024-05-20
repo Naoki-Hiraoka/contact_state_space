@@ -12,5 +12,7 @@
 
   <depend>choreonoid</depend>
   <depend>rtmbuild2</depend>
+  <depend>eigen_rtm_conversions</depend>
+  <depend>cpp_filters</depend>
 
 </package>

@@ -4,6 +4,7 @@
 #include <cnoid/SceneGraph>
 #include <cnoid/RateGyroSensor>
 #include <cnoid/EigenUtil>
+#include <eigen_rtm_conversions/eigen_rtm_conversions.h>
 
 #include "MathUtil.h"
 
@@ -11,6 +12,8 @@ TactileOdometry::Ports::Ports() :
   m_qActIn_("qAct", m_qAct_),
   m_actImuIn_("actImuIn", m_actImu_),
   m_tactileSensorIn_("tactileSensorIn", m_tactileSensor_),
+  m_odomBasePoseOut_("odomBasePose", m_odomBasePose_),
+  m_odomBaseVelOut_("odomBaseVel", m_odomBaseVel_),
 
   m_TactileOdometryServicePort_("TactileOdometryService") {
 }
@@ -19,6 +22,8 @@ void TactileOdometry::Ports::onInitialize(TactileOdometry* component) {
   component->addInPort("tactileSensorIn", this->m_tactileSensorIn_);
   component->addInPort("qAct", this->m_qActIn_);
   component->addInPort("actImuIn", this->m_actImuIn_);
+  component->addOutPort("odomBasePose", this->m_odomBasePoseOut_);
+  component->addOutPort("odomBaseVel", this->m_odomBaseVelOut_);
 
   this->m_TactileOdometryServicePort_.registerProvider("service0", "TactileOdometryService", this->m_service0_);
   component->addPort(this->m_TactileOdometryServicePort_);
@@ -139,11 +144,20 @@ RTC::ReturnCode_t TactileOdometry::onDeactivated(RTC::UniqueId ec_id) {
 
 RTC::ReturnCode_t TactileOdometry::onExecute(RTC::UniqueId ec_id){
   std::lock_guard<std::mutex> guard(this->mutex_);
-  std::string instance_name = std::string(this->m_profile.instance_name);
+  const std::string instance_name = std::string(this->m_profile.instance_name);
+  const double dt = 1.0 / this->get_context(ec_id)->get_rate();
 
+  // curRobotをprevRobotへコピー
+  TactileOdometry::curRobot2PrevRobot(instance_name, this->prevRobot_, this->curRobot_);
+
+  // InPortの値をcurRobotへ反映
   if(!TactileOdometry::readInPortData(instance_name, this->ports_, this->curRobot_, this->tactileSensors_)) return RTC::RTC_OK;  // q が届かなければ何もしない
 
-  TactileOdometry::writeOutPortData(instance_name, this->ports_);
+  // curRobotとprevRobotから速度を計算.
+  TactileOdometry::calcVelocity(instance_name, this->curRobot_, this->prevRobot_, dt, this->odomBaseVel_);
+
+  // curRobotと速度を出力
+  TactileOdometry::writeOutPortData(instance_name, this->ports_, this->curRobot_, this->odomBaseVel_);
 
   return RTC::RTC_OK;
 }
@@ -157,10 +171,17 @@ bool TactileOdometry::getTactileOdometryParam(contact_state_rtc::TactileOdometry
 }
 
 bool TactileOdometry::setRobotPos(const RTC::Point3D& pos) {
+  std::lock_guard<std::mutex> guard(this->mutex_);
+  if(!std::isfinite(pos.x) || !std::isfinite(pos.y) || !std::isfinite(pos.z)) return false;
+  eigen_rtm_conversions::pointRTMToEigen(pos, this->curRobot_->rootLink()->p());
   return true;
 }
 
 bool TactileOdometry::setRobotPose(const RTC::Pose3D& pose){
+  std::lock_guard<std::mutex> guard(this->mutex_);
+  if(!std::isfinite(pose.position.x) || !std::isfinite(pose.position.y) || !std::isfinite(pose.position.z)) return false;
+  if(!std::isfinite(pose.orientation.r) || !std::isfinite(pose.orientation.p) || !std::isfinite(pose.orientation.y)) return false;
+  eigen_rtm_conversions::poseRTMToEigen(pose, this->curRobot_->rootLink()->T());
   return true;
 }
 
@@ -173,6 +194,16 @@ bool TactileOdometry::getProperty(const std::string& key, std::string& ret) {
     return false;
   }
   std::cerr << "[" << this->m_profile.instance_name << "] " << key << ": " << ret <<std::endl;
+  return true;
+}
+
+bool TactileOdometry::curRobot2PrevRobot(const std::string& instance_name, cnoid::ref_ptr<const cnoid::Body> curRobot, cnoid::BodyPtr prevRobot) {
+  prevRobot->rootLink()->T() = curRobot->rootLink()->T();
+  for(int i=0;i<curRobot->numJoints();i++) {
+    prevRobot->joint(i)->q() = curRobot->joint(i)->q();
+  }
+  prevRobot->calcForwardKinematics();
+
   return true;
 }
 
@@ -194,7 +225,7 @@ bool TactileOdometry::readInPortData(const std::string& instance_name, TactileOd
       curRobot->calcForwardKinematics();
       cnoid::RateGyroSensorPtr imu = curRobot->findDevice<cnoid::RateGyroSensor>("gyrometer");
       cnoid::Matrix3 tmpImuR = imu->link()->R() * imu->R_local();
-      cnoid::Matrix3 actImuRraw = cnoid::rotFromRpy(ports.m_actImu_.data.r, ports.m_actImu_.data.p, ports.m_actImu_.data.y);
+      cnoid::Matrix3 actImuRraw; eigen_rtm_conversions::orientationRTMToEigen(ports.m_actImu_.data, actImuRraw);
       cnoid::Matrix3 actImuR = mathutil::orientCoordToAxis(tmpImuR, actImuRraw * cnoid::Vector3::UnitZ());
       curRobot->rootLink()->R() = Eigen::Matrix3d(Eigen::AngleAxisd(actImuR) * Eigen::AngleAxisd(tmpImuR.transpose() * curRobot->rootLink()->R())); // 単純に3x3行列の空間でRを積算していると、だんだん数値誤差によって回転行列でなくなってしまう恐れがあるので念の為
     }else{
@@ -217,7 +248,36 @@ bool TactileOdometry::readInPortData(const std::string& instance_name, TactileOd
   return qAct_updated;
 }
 
-bool TactileOdometry::writeOutPortData(const std::string& instance_name, TactileOdometry::Ports& ports) {
+bool TactileOdometry::calcOdometry(const std::string& instance_name, cnoid::BodyPtr curRobot, cnoid::ref_ptr<const cnoid::Body> prevRobot, std::vector<TactileSensor>& tactileSensors) {
+
+
+
+  return true;
+}
+
+bool TactileOdometry::calcVelocity(const std::string& instance_name, cnoid::ref_ptr<const cnoid::Body> curRobot, cnoid::ref_ptr<const cnoid::Body> prevRobot, double dt, cpp_filters::FirstOrderLowPassFilter<cnoid::Vector6>& odomBaseVel) {
+  {
+    cnoid::Isometry3 diff = curRobot->rootLink()->T() * prevRobot->rootLink()->T().inverse();
+    cnoid::Vector6 vel;
+    vel.head<3>() = diff.translation() / dt;
+    cnoid::AngleAxisd dr(diff.linear());
+    vel.tail<3>() = dr.axis() * dr.angle() / dt;
+    odomBaseVel.passFilter(vel, dt);
+  }
+
+  return true;
+}
+
+bool TactileOdometry::writeOutPortData(const std::string& instance_name, TactileOdometry::Ports& ports, cnoid::ref_ptr<const cnoid::Body> curRobot, const cpp_filters::FirstOrderLowPassFilter<cnoid::Vector6>& odomBaseVel) {
+  ports.m_odomBasePose_.tm = ports.m_qAct_.tm;
+  eigen_rtm_conversions::poseEigenToRTM(curRobot->rootLink()->T(), ports.m_odomBasePose_.data);
+  ports.m_odomBasePoseOut_.write();
+
+  ports.m_odomBaseVel_.tm = ports.m_qAct_.tm;
+  eigen_rtm_conversions::velocityEigenToRTM(odomBaseVel.value(), ports.m_odomBaseVel_.data);
+  ports.m_odomBaseVelOut_.write();
+
+
   return true;
 }
 

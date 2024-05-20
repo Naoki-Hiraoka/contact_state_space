@@ -14,6 +14,8 @@
 
 #include <cnoid/Body>
 
+#include <cpp_filters/FirstOrderLowPassFilter.h>
+
 class TactileOdometry : public RTC::DataFlowComponentBase{
 public:
   TactileOdometry(RTC::Manager* manager);
@@ -40,6 +42,10 @@ protected:
     RTC::InPort<RTC::TimedOrientation3D> m_actImuIn_;
     RTC::TimedDoubleSeq m_tactileSensor_;
     RTC::InPort<RTC::TimedDoubleSeq> m_tactileSensorIn_;
+    RTC::TimedPose3D m_odomBasePose_;
+    RTC::OutPort<RTC::TimedPose3D> m_odomBasePoseOut_;
+    RTC::TimedVelocity3D m_odomBaseVel_;
+    RTC::OutPort<RTC::TimedVelocity3D> m_odomBaseVelOut_;
     TactileOdometryService_impl m_service0_;
     RTC::CorbaPort m_TactileOdometryServicePort_;
   };
@@ -62,11 +68,16 @@ protected:
 
   cnoid::BodyPtr prevRobot_;
   cnoid::BodyPtr curRobot_;
+  cpp_filters::FirstOrderLowPassFilter<cnoid::Vector6> odomBaseVel_ = cpp_filters::FirstOrderLowPassFilter<cnoid::Vector6>(3.5, cnoid::Vector6::Zero());
 
 protected:
   bool getProperty(const std::string& key, std::string& ret);
+
+  static bool curRobot2PrevRobot(const std::string& instance_name, cnoid::ref_ptr<const cnoid::Body> curRobot, cnoid::BodyPtr prevRobot);
   static bool readInPortData(const std::string& instance_name, TactileOdometry::Ports& ports, cnoid::BodyPtr curRobot, std::vector<TactileSensor>& tactileSensors);
-  static bool writeOutPortData(const std::string& instance_name, TactileOdometry::Ports& ports);
+  static bool calcOdometry(const std::string& instance_name, cnoid::BodyPtr curRobot, cnoid::ref_ptr<const cnoid::Body> prevRobot, std::vector<TactileSensor>& tactileSensors);
+  static bool calcVelocity(const std::string& instance_name, cnoid::ref_ptr<const cnoid::Body> curRobot, cnoid::ref_ptr<const cnoid::Body> prevRobot, double dt, cpp_filters::FirstOrderLowPassFilter<cnoid::Vector6>& odomBaseVel);
+  static bool writeOutPortData(const std::string& instance_name, TactileOdometry::Ports& ports, cnoid::ref_ptr<const cnoid::Body> curRobot, const cpp_filters::FirstOrderLowPassFilter<cnoid::Vector6>& odomBaseVel);
 };
 
 extern "C"
