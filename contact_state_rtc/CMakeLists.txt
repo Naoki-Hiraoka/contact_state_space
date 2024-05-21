@@ -12,7 +12,7 @@ find_package(catkin REQUIRED COMPONENTS
 find_package(choreonoid REQUIRED)
 
 # initialize rtmbuild (generate_messages is called)
-rtmbuild2_init()
+rtmbuild2_init(rtmbuild2)
 
 ###################################
 ## catkin specific configuration ##

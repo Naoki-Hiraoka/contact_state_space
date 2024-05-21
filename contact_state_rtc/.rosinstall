@@ -12,4 +12,8 @@
 - git:
     local-name: cpp_filters
     uri: https://github.com/Naoki-Hiraoka/cpp_filters.git
+- git:
+    local-name: ik_solvers2
+    uri: https://github.com/Naoki-Hiraoka/ik_solvers2.git
+    version: 2.0
 

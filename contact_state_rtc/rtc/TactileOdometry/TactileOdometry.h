@@ -15,6 +15,7 @@
 #include <cnoid/Body>
 
 #include <cpp_filters/FirstOrderLowPassFilter.h>
+#include <ik_constraint2/ik_constraint2.h>
 
 class TactileOdometry : public RTC::DataFlowComponentBase{
 public:
@@ -58,8 +59,9 @@ protected:
     std::string linkName = ""; // 親リンク名 (!= ジョイント名)
     cnoid::LinkPtr prevLink = nullptr;  // 親リンク
     cnoid::LinkPtr curLink = nullptr;  // 親リンク
-    cnoid::Vector3 translation = cnoid::Vector3::Zero(); // リンク座標系でどこに取り付けられているか
-    cnoid::Matrix3 rotation = cnoid::Matrix3::Identity(); // リンク座標系でセンサの姿勢．zがリンク内側方向
+    cnoid::Isometry3 localPose = cnoid::Isometry3::Identity(); // リンク座標系でどこに取り付けられているか．センサzがリンク内側方向
+
+    std::shared_ptr<ik_constraint2::PositionConstraint> ikc; // A_linkにcurRobot. B_linkにworld.
 
     // from sensor
     bool isContact = false;

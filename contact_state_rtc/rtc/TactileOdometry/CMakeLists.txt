@@ -5,6 +5,8 @@ add_definitions(-Wno-deprecated)
 find_package(catkin REQUIRED COMPONENTS
   eigen_rtm_conversions
   cpp_filters
+  ik_constraint2
+  sr_inverse_kinematics_solver
   )
 
 find_package(PkgConfig)

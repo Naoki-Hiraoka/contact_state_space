@@ -14,5 +14,7 @@
   <depend>rtmbuild2</depend>
   <depend>eigen_rtm_conversions</depend>
   <depend>cpp_filters</depend>
+  <depend>ik_constraint2</depend>
+  <depend>sr_inverse_kinematics_solver</depend>
 
 </package>

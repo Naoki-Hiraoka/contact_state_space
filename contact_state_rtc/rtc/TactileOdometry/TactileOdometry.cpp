@@ -5,6 +5,7 @@
 #include <cnoid/RateGyroSensor>
 #include <cnoid/EigenUtil>
 #include <eigen_rtm_conversions/eigen_rtm_conversions.h>
+#include <sr_inverse_kinematics_solver/sr_inverse_kinematics_solver.h>
 
 #include "MathUtil.h"
 
@@ -111,7 +112,7 @@ RTC::ReturnCode_t TactileOdometry::onInitialize(){
       if(translation_){
         cnoid::ListingPtr translationTmp = translation_->toListing();
         if(translationTmp->size()==3){
-          sensor.translation = cnoid::Vector3(translationTmp->at(0)->toDouble(), translationTmp->at(1)->toDouble(), translationTmp->at(2)->toDouble());
+          sensor.localPose.translation() = cnoid::Vector3(translationTmp->at(0)->toDouble(), translationTmp->at(1)->toDouble(), translationTmp->at(2)->toDouble());
         }
       }
       // rotation
@@ -119,10 +120,19 @@ RTC::ReturnCode_t TactileOdometry::onInitialize(){
       if(rotation_){
         cnoid::ListingPtr rotationTmp = rotation_->toListing();
         if(rotationTmp->size() == 4){
-          sensor.rotation = cnoid::AngleAxisd(rotationTmp->at(3)->toDouble(),
-                                              cnoid::Vector3{rotationTmp->at(0)->toDouble(), rotationTmp->at(1)->toDouble(), rotationTmp->at(2)->toDouble()}).toRotationMatrix();
+          sensor.localPose.linear() = cnoid::AngleAxisd(rotationTmp->at(3)->toDouble(),
+                                                        cnoid::Vector3{rotationTmp->at(0)->toDouble(), rotationTmp->at(1)->toDouble(), rotationTmp->at(2)->toDouble()}).toRotationMatrix();
         }
       }
+
+      // constraint
+      std::shared_ptr<ik_constraint2::PositionConstraint> ikc = std::make_shared<ik_constraint2::PositionConstraint>();
+      ikc->A_link() = sensor.curLink;
+      ikc->A_localpos() = sensor.localPose;
+      ikc->B_link() = nullptr;
+      ikc->weight() << 1.0, 1.0, 1.0, 0.0, 0.0, 0.0;
+      sensor.ikc = ikc;
+
       this->tactileSensors_.push_back(sensor);
     }
   }
@@ -250,7 +260,25 @@ bool TactileOdometry::readInPortData(const std::string& instance_name, TactileOd
 
 bool TactileOdometry::calcOdometry(const std::string& instance_name, cnoid::BodyPtr curRobot, cnoid::ref_ptr<const cnoid::Body> prevRobot, std::vector<TactileSensor>& tactileSensors) {
 
+  std::vector<std::shared_ptr<ik_constraint2::IKConstraint> > ikc_list;
+  for(int i=0;i<tactileSensors.size();i++){
+    if(!tactileSensors[i].isContact) continue;
 
+    std::shared_ptr<ik_constraint2::PositionConstraint> ikc = tactileSensors[i].ikc;
+    ikc->B_link() = nullptr;
+    ikc->B_localpos() = tactileSensors[i].prevLink->T() * tactileSensors[i].localPose;
+    ikc_list.push_back(ikc);
+  }
+
+  std::vector<cnoid::LinkPtr> variables;
+  variables.push_back(curRobot->rootLink());
+
+  sr_inverse_kinematics_solver::IKParam param;
+  param.maxIteration = 1;
+  param.minIteration = 1;
+  param.dqWeight = std::vector<double>{1.0, 1.0, 1.0, 0.0, 0.0, 1.0};
+
+  sr_inverse_kinematics_solver::solveIKLoop(variables, ikc_list, param);
 
   return true;
 }
