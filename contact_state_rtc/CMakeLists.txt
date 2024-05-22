@@ -12,12 +12,14 @@ find_package(catkin REQUIRED COMPONENTS
 find_package(choreonoid REQUIRED)
 
 # initialize rtmbuild (generate_messages is called)
-rtmbuild2_init(rtmbuild2)
+rtmbuild2_init(rtmbuild2) # ここにidlとmsgが依存する外部パッケージを書く
 
 ###################################
 ## catkin specific configuration ##
 ###################################
 catkin_package(
+  LIBRARIES TactileOdometrySeviceSkel TactileOdometrySeviceStub
+  DEPENDS openrtm_aist
   )
 
 ###########

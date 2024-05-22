@@ -13,8 +13,8 @@ TactileOdometry::Ports::Ports() :
   m_qActIn_("qAct", m_qAct_),
   m_actImuIn_("actImuIn", m_actImu_),
   m_tactileSensorIn_("tactileSensorIn", m_tactileSensor_),
-  m_odomBasePoseOut_("odomBasePose", m_odomBasePose_),
-  m_odomBaseVelOut_("odomBaseVel", m_odomBaseVel_),
+  m_odomBasePoseOut_("odomBasePoseOut", m_odomBasePose_),
+  m_odomBaseVelOut_("odomBaseVelOut", m_odomBaseVel_),
 
   m_TactileOdometryServicePort_("TactileOdometryService") {
 }
@@ -23,8 +23,8 @@ void TactileOdometry::Ports::onInitialize(TactileOdometry* component) {
   component->addInPort("tactileSensorIn", this->m_tactileSensorIn_);
   component->addInPort("qAct", this->m_qActIn_);
   component->addInPort("actImuIn", this->m_actImuIn_);
-  component->addOutPort("odomBasePose", this->m_odomBasePoseOut_);
-  component->addOutPort("odomBaseVel", this->m_odomBaseVelOut_);
+  component->addOutPort("odomBasePoseOut", this->m_odomBasePoseOut_);
+  component->addOutPort("odomBaseVelOut", this->m_odomBaseVelOut_);
 
   this->m_TactileOdometryServicePort_.registerProvider("service0", "TactileOdometryService", this->m_service0_);
   component->addPort(this->m_TactileOdometryServicePort_);
@@ -158,10 +158,13 @@ RTC::ReturnCode_t TactileOdometry::onExecute(RTC::UniqueId ec_id){
   const double dt = 1.0 / this->get_context(ec_id)->get_rate();
 
   // curRobotをprevRobotへコピー
-  TactileOdometry::curRobot2PrevRobot(instance_name, this->prevRobot_, this->curRobot_);
+  TactileOdometry::curRobot2PrevRobot(instance_name, this->curRobot_, this->prevRobot_);
 
   // InPortの値をcurRobotへ反映
   if(!TactileOdometry::readInPortData(instance_name, this->ports_, this->curRobot_, this->tactileSensors_)) return RTC::RTC_OK;  // q が届かなければ何もしない
+
+  // Odometryを計算. curRobotの姿勢を更新
+  TactileOdometry::calcOdometry(instance_name, this->curRobot_, this->prevRobot_, this->tactileSensors_);
 
   // curRobotとprevRobotから速度を計算.
   TactileOdometry::calcVelocity(instance_name, this->curRobot_, this->prevRobot_, dt, this->odomBaseVel_);
@@ -234,10 +237,10 @@ bool TactileOdometry::readInPortData(const std::string& instance_name, TactileOd
     if(std::isfinite(ports.m_actImu_.data.r) && std::isfinite(ports.m_actImu_.data.p) && std::isfinite(ports.m_actImu_.data.y)){
       curRobot->calcForwardKinematics();
       cnoid::RateGyroSensorPtr imu = curRobot->findDevice<cnoid::RateGyroSensor>("gyrometer");
-      cnoid::Matrix3 tmpImuR = imu->link()->R() * imu->R_local();
+      cnoid::Matrix3 prevImuR = imu->link()->R() * imu->R_local();
       cnoid::Matrix3 actImuRraw; eigen_rtm_conversions::orientationRTMToEigen(ports.m_actImu_.data, actImuRraw);
-      cnoid::Matrix3 actImuR = mathutil::orientCoordToAxis(tmpImuR, actImuRraw * cnoid::Vector3::UnitZ());
-      curRobot->rootLink()->R() = Eigen::Matrix3d(Eigen::AngleAxisd(actImuR) * Eigen::AngleAxisd(tmpImuR.transpose() * curRobot->rootLink()->R())); // 単純に3x3行列の空間でRを積算していると、だんだん数値誤差によって回転行列でなくなってしまう恐れがあるので念の為
+      cnoid::Matrix3 actImuR = mathutil::orientCoordToAxis(prevImuR, cnoid::Vector3::UnitZ(), actImuRraw.transpose() * cnoid::Vector3::UnitZ());
+      curRobot->rootLink()->R() = Eigen::Matrix3d(Eigen::AngleAxisd(actImuR) * Eigen::AngleAxisd(prevImuR.transpose() * curRobot->rootLink()->R())); // 単純に3x3行列の空間でRを積算していると、だんだん数値誤差によって回転行列でなくなってしまう恐れがあるので念の為
     }else{
       std::cerr << "[" << instance_name << "] " << "m_actImu is not finite!" << std::endl;
     }
@@ -249,7 +252,7 @@ bool TactileOdometry::readInPortData(const std::string& instance_name, TactileOd
     if(ports.m_tactileSensor_.data.length() == tactileSensors.size() * 3){
       for (int i=0; i<tactileSensors.size(); i++) {
         // TODO threshould
-        tactileSensors[i].isContact = (ports.m_tactileSensor_.data[i*3+2] == 0.0);
+        tactileSensors[i].isContact = (ports.m_tactileSensor_.data[i*3+2] != 0.0);
       }
     }else{
       std::cerr << "[" << instance_name << "] " << "tactile sensor dimension mismatch!" << std::endl;
@@ -267,6 +270,7 @@ bool TactileOdometry::calcOdometry(const std::string& instance_name, cnoid::Body
     std::shared_ptr<ik_constraint2::PositionConstraint> ikc = tactileSensors[i].ikc;
     ikc->B_link() = nullptr;
     ikc->B_localpos() = tactileSensors[i].prevLink->T() * tactileSensors[i].localPose;
+    //ikc->debugLevel() = 1;
     ikc_list.push_back(ikc);
   }
 
@@ -274,9 +278,10 @@ bool TactileOdometry::calcOdometry(const std::string& instance_name, cnoid::Body
   variables.push_back(curRobot->rootLink());
 
   sr_inverse_kinematics_solver::IKParam param;
-  param.maxIteration = 1;
-  param.minIteration = 1;
+  param.maxIteration = 3;
+  param.minIteration = 3;
   param.dqWeight = std::vector<double>{1.0, 1.0, 1.0, 0.0, 0.0, 1.0};
+  //param.debugLevel = 1;
 
   sr_inverse_kinematics_solver::solveIKLoop(variables, ikc_list, param);
 

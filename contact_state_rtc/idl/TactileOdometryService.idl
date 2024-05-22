@@ -1,3 +1,6 @@
+#ifndef TactileOdometryService_idl
+#define TactileOdometryService_idl
+
 #include "BasicDataType.idl"
 #include "ExtendedDataTypes.idl"
 
@@ -40,3 +43,5 @@ module contact_state_rtc
     boolean setRobotPose(in RTC::Pose3D pose);
   };
 };
+
+#endif
