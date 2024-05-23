@@ -1,0 +1,11 @@
+- git:
+    local-name: rtmbuild2
+    uri: https://github.com/Naoki-Hiraoka/rtmbuild2.git
+- git:
+    local-name: choreonoid
+    uri: https://github.com/choreonoid/choreonoid.git
+    version: release-2.1
+- git:
+    local-name: eigen_rtm_conversions
+    uri: https://github.com/Naoki-Hiraoka/eigen_rtm_conversions.git
+    version: 1.0

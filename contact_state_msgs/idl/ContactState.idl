@@ -1,0 +1,21 @@
+#include "ExtendedDataTypes.idl" // openrtm
+
+module contact_state_msgs
+{
+
+  struct ContactIdl
+  {
+    // link: joint名. ""ならworld.
+    string link1;
+    RTC::Pose3D local_pose; // link1 local frame. Z軸がlink2からlink1へ向かう方向
+    string link2;
+    boolean free_x; // local_pose frame
+    boolean free_y; // local_pose frame
+  };
+
+  struct TimedContactSeq
+  {
+    RTC::Time tm;
+    sequence<ContactIdl> data;
+  };
+};

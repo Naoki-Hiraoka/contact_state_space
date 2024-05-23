@@ -1,0 +1,3 @@
+- git:
+    local-name: rtmbuild2
+    uri: https://github.com/Naoki-Hiraoka/rtmbuild2.git
