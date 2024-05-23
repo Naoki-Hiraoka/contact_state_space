@@ -1,0 +1,47 @@
+#ifndef ContactStateHolderService_idl
+#define ContactStateHolderService_idl
+
+#include "BasicDataType.idl"
+#include "ExtendedDataTypes.idl"
+
+module contact_state_rtc
+{
+  interface ContactStateHolderService
+  {
+    struct ContactStateHolderParam
+    {
+      // hoge
+      RTC::TimedDoubleSeq hoge;
+    };
+
+    /**
+     * @brief Set ContactStateHolder parameters
+     * @param i_param is input parameter
+     * @return true if set successfully, false otherwise
+     */
+    boolean setContactStateHolderParam(in ContactStateHolderParam i_param);
+
+    /**
+     * @brief Get ContactStateHolder parameters.
+     * @param i_param is output parameters
+     * @return true if set successfully, false otherwise
+     */
+    boolean getContactStateHolderParam(out ContactStateHolderParam o_param);
+
+    /**
+     * @brief Set position of robot's root link.
+     * @param pose is input position (world frame)
+     * @return true if set successfully, false otherwise
+     */
+    boolean setRobotPos(in RTC::Point3D pos);
+
+    /**
+     * @brief Set pose of robot's root link.
+     * @param pose is input pose (world frame)
+     * @return true if set successfully, false otherwise
+     */
+    boolean setRobotPose(in RTC::Pose3D pose);
+  };
+};
+
+#endif

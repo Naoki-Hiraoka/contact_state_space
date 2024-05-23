@@ -12,6 +12,7 @@
 
   <depend>choreonoid</depend>
   <depend>rtmbuild2</depend>
+  <depend>contact_state_msgs</depend>
   <depend>eigen_rtm_conversions</depend>
   <depend>cpp_filters</depend>
   <depend>ik_constraint2</depend>

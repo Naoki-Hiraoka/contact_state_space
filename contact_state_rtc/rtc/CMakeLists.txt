@@ -1,1 +1,2 @@
 add_subdirectory(TactileOdometry)
+add_subdirectory(ContactStateHolder)
