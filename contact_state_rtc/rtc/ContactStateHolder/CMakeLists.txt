@@ -7,6 +7,7 @@ find_package(catkin REQUIRED COMPONENTS
   cpp_filters
   ik_constraint2
   sr_inverse_kinematics_solver
+  contact_state_msgs
   )
 
 find_package(PkgConfig)

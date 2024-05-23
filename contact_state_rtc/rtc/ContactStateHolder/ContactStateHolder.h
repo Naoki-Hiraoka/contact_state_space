@@ -17,6 +17,8 @@
 #include <cpp_filters/FirstOrderLowPassFilter.h>
 #include <ik_constraint2/ik_constraint2.h>
 
+#include <contact_state_msgs/idl/ContactState.hh>
+
 class ContactStateHolder : public RTC::DataFlowComponentBase{
 public:
   ContactStateHolder(RTC::Manager* manager);
@@ -47,6 +49,8 @@ protected:
     RTC::OutPort<RTC::TimedPose3D> m_odomBasePoseOut_;
     RTC::TimedVelocity3D m_odomBaseVel_;
     RTC::OutPort<RTC::TimedVelocity3D> m_odomBaseVelOut_;
+    contact_state_msgs::TimedContactSeq m_contactState_;
+    RTC::OutPort<contact_state_msgs::TimedContactSeq> m_contactStateOut_;
     ContactStateHolderService_impl m_service0_;
     RTC::CorbaPort m_ContactStateHolderServicePort_;
   };
@@ -61,12 +65,26 @@ protected:
     cnoid::LinkPtr curLink = nullptr;  // 親リンク
     cnoid::Isometry3 localPose = cnoid::Isometry3::Identity(); // リンク座標系でどこに取り付けられているか．センサzがリンク内側方向
 
-    std::shared_ptr<ik_constraint2::PositionConstraint> ikc; // A_linkにcurRobot. B_linkにworld.
+    std::shared_ptr<ik_constraint2::PositionConstraint> ikc = std::make_shared<ik_constraint2::PositionConstraint>(); // A_linkにcurLink. A_localposにlocalPose. Bは未定義.
 
     // from sensor
     bool isContact = false;
   };
   std::vector<TactileSensor> tactileSensors_;
+
+  class ContactState {
+  public:
+    cnoid::LinkPtr prevLink1;
+    cnoid::LinkPtr curLink1;
+    cnoid::Isometry3 localPose1 = cnoid::Isometry3::Identity();
+    cnoid::LinkPtr prevLink2;
+    cnoid::LinkPtr curLink2;
+    bool freeX = false;
+    bool freeY = false;
+
+    std::shared_ptr<ik_constraint2::PositionConstraint> ikc;
+  };
+  std::vector<ContactState> contactStates_;
 
   cnoid::BodyPtr prevRobot_;
   cnoid::BodyPtr curRobot_;
@@ -77,9 +95,10 @@ protected:
 
   static bool curRobot2PrevRobot(const std::string& instance_name, cnoid::ref_ptr<const cnoid::Body> curRobot, cnoid::BodyPtr prevRobot);
   static bool readInPortData(const std::string& instance_name, ContactStateHolder::Ports& ports, cnoid::BodyPtr curRobot, std::vector<TactileSensor>& tactileSensors);
-  static bool calcOdometry(const std::string& instance_name, cnoid::BodyPtr curRobot, cnoid::ref_ptr<const cnoid::Body> prevRobot, std::vector<TactileSensor>& tactileSensors);
+  static bool calcContactState(const std::string& instance_name, cnoid::ref_ptr<const cnoid::Body> prevRobot, const std::vector<TactileSensor>& tactileSensors, std::vector<ContactState>& contactStates);
+  static bool calcOdometry(const std::string& instance_name, cnoid::ref_ptr<const cnoid::Body> prevRobot, const std::vector<ContactState>& contactStates, cnoid::BodyPtr curRobot);
   static bool calcVelocity(const std::string& instance_name, cnoid::ref_ptr<const cnoid::Body> curRobot, cnoid::ref_ptr<const cnoid::Body> prevRobot, double dt, cpp_filters::FirstOrderLowPassFilter<cnoid::Vector6>& odomBaseVel);
-  static bool writeOutPortData(const std::string& instance_name, ContactStateHolder::Ports& ports, cnoid::ref_ptr<const cnoid::Body> curRobot, const cpp_filters::FirstOrderLowPassFilter<cnoid::Vector6>& odomBaseVel);
+  static bool writeOutPortData(const std::string& instance_name, cnoid::ref_ptr<const cnoid::Body> curRobot, const std::vector<ContactState>& contactStates, const cpp_filters::FirstOrderLowPassFilter<cnoid::Vector6>& odomBaseVel, ContactStateHolder::Ports& ports);
 };
 
 extern "C"

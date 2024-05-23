@@ -15,6 +15,7 @@ ContactStateHolder::Ports::Ports() :
   m_tactileSensorIn_("tactileSensorIn", m_tactileSensor_),
   m_odomBasePoseOut_("odomBasePoseOut", m_odomBasePose_),
   m_odomBaseVelOut_("odomBaseVelOut", m_odomBaseVel_),
+  m_contactStateOut_("contactStateOut", m_contactState_),
 
   m_ContactStateHolderServicePort_("ContactStateHolderService") {
 }
@@ -25,6 +26,7 @@ void ContactStateHolder::Ports::onInitialize(ContactStateHolder* component) {
   component->addInPort("actImuIn", this->m_actImuIn_);
   component->addOutPort("odomBasePoseOut", this->m_odomBasePoseOut_);
   component->addOutPort("odomBaseVelOut", this->m_odomBaseVelOut_);
+  component->addOutPort("contactStateOut", this->m_contactStateOut_);
 
   this->m_ContactStateHolderServicePort_.registerProvider("service0", "ContactStateHolderService", this->m_service0_);
   component->addPort(this->m_ContactStateHolderServicePort_);
@@ -126,12 +128,8 @@ RTC::ReturnCode_t ContactStateHolder::onInitialize(){
       }
 
       // constraint
-      std::shared_ptr<ik_constraint2::PositionConstraint> ikc = std::make_shared<ik_constraint2::PositionConstraint>();
-      ikc->A_link() = sensor.curLink;
-      ikc->A_localpos() = sensor.localPose;
-      ikc->B_link() = nullptr;
-      ikc->weight() << 1.0, 1.0, 1.0, 0.0, 0.0, 0.0;
-      sensor.ikc = ikc;
+      sensor.ikc->A_link() = sensor.curLink;
+      sensor.ikc->A_localpos() = sensor.localPose;
 
       this->tactileSensors_.push_back(sensor);
     }
@@ -158,19 +156,28 @@ RTC::ReturnCode_t ContactStateHolder::onExecute(RTC::UniqueId ec_id){
   const double dt = 1.0 / this->get_context(ec_id)->get_rate();
 
   // curRobotをprevRobotへコピー
-  ContactStateHolder::curRobot2PrevRobot(instance_name, this->curRobot_, this->prevRobot_);
+  ContactStateHolder::curRobot2PrevRobot(instance_name, this->curRobot_,
+                                         this->prevRobot_);
 
   // InPortの値をcurRobotへ反映
-  if(!ContactStateHolder::readInPortData(instance_name, this->ports_, this->curRobot_, this->tactileSensors_)) return RTC::RTC_OK;  // q が届かなければ何もしない
+  if(!ContactStateHolder::readInPortData(instance_name, this->ports_,
+                                         this->curRobot_, this->tactileSensors_)) {
+    return RTC::RTC_OK;  // q が届かなければ何もしない
+  }
+
+  ContactStateHolder::calcContactState(instance_name, this->prevRobot_, this->tactileSensors_,
+                                       this->contactStates_);
 
   // Odometryを計算. curRobotの姿勢を更新
-  ContactStateHolder::calcOdometry(instance_name, this->curRobot_, this->prevRobot_, this->tactileSensors_);
+  ContactStateHolder::calcOdometry(instance_name, this->prevRobot_, this->contactStates_,
+                                   this->curRobot_);
 
   // curRobotとprevRobotから速度を計算.
-  ContactStateHolder::calcVelocity(instance_name, this->curRobot_, this->prevRobot_, dt, this->odomBaseVel_);
+  ContactStateHolder::calcVelocity(instance_name, this->curRobot_, this->prevRobot_, dt,
+                                   this->odomBaseVel_);
 
   // curRobotと速度を出力
-  ContactStateHolder::writeOutPortData(instance_name, this->ports_, this->curRobot_, this->odomBaseVel_);
+  ContactStateHolder::writeOutPortData(instance_name, this->curRobot_, this->contactStates_, this->odomBaseVel_, this->ports_);
 
   return RTC::RTC_OK;
 }
@@ -261,15 +268,40 @@ bool ContactStateHolder::readInPortData(const std::string& instance_name, Contac
   return qAct_updated;
 }
 
-bool ContactStateHolder::calcOdometry(const std::string& instance_name, cnoid::BodyPtr curRobot, cnoid::ref_ptr<const cnoid::Body> prevRobot, std::vector<TactileSensor>& tactileSensors) {
-
-  std::vector<std::shared_ptr<ik_constraint2::IKConstraint> > ikc_list;
+bool ContactStateHolder::calcContactState(const std::string& instance_name, cnoid::ref_ptr<const cnoid::Body> prevRobot, const std::vector<TactileSensor>& tactileSensors, std::vector<ContactState>& contactStates) {
+  contactStates.clear();
   for(int i=0;i<tactileSensors.size();i++){
     if(!tactileSensors[i].isContact) continue;
+    ContactState contact;
+    contact.prevLink1 = tactileSensors[i].prevLink;
+    contact.curLink1 = tactileSensors[i].curLink;
+    contact.localPose1 = tactileSensors[i].localPose;
+    contact.prevLink2 = nullptr;
+    contact.curLink2 = nullptr;
+    contact.freeX = false;
+    contact.freeY = false;
+    contact.ikc = tactileSensors[i].ikc;
+    contactStates.push_back(contact);
+  }
 
-    std::shared_ptr<ik_constraint2::PositionConstraint> ikc = tactileSensors[i].ikc;
-    ikc->B_link() = nullptr;
-    ikc->B_localpos() = tactileSensors[i].prevLink->T() * tactileSensors[i].localPose;
+  return true;
+}
+
+bool ContactStateHolder::calcOdometry(const std::string& instance_name, cnoid::ref_ptr<const cnoid::Body> prevRobot, const std::vector<ContactState>& contactStates, cnoid::BodyPtr curRobot) {
+
+  std::vector<std::shared_ptr<ik_constraint2::IKConstraint> > ikc_list;
+  for(int i=0;i<contactStates.size();i++){
+    std::shared_ptr<ik_constraint2::PositionConstraint> ikc = contactStates[i].ikc;
+    cnoid::Isometry3 pose1 = contactStates[i].prevLink1 ? contactStates[i].prevLink1->T() * contactStates[i].localPose1 : contactStates[i].localPose1; // world系.
+    cnoid::Isometry3 localPose2 = contactStates[i].prevLink2 ? contactStates[i].prevLink2->T().inverse() * pose1 : pose1; // link2 local
+
+    ikc->A_link() = contactStates[i].curLink1;
+    ikc->A_localpos() = contactStates[i].localPose1;
+    ikc->B_link() = contactStates[i].curLink2;
+    ikc->B_localpos() = localPose2;
+    ikc->eval_link() = contactStates[i].curLink1;
+    ikc->eval_localR() = contactStates[i].localPose1.linear();
+    ikc->weight() << (contactStates[i].freeX ? 0.0 : 1.0), (contactStates[i].freeY ? 0.0 : 1.0), 1.0, 0.0, 0.0, 0.0;
     //ikc->debugLevel() = 1;
     ikc_list.push_back(ikc);
   }
@@ -301,7 +333,7 @@ bool ContactStateHolder::calcVelocity(const std::string& instance_name, cnoid::r
   return true;
 }
 
-bool ContactStateHolder::writeOutPortData(const std::string& instance_name, ContactStateHolder::Ports& ports, cnoid::ref_ptr<const cnoid::Body> curRobot, const cpp_filters::FirstOrderLowPassFilter<cnoid::Vector6>& odomBaseVel) {
+bool ContactStateHolder::writeOutPortData(const std::string& instance_name, cnoid::ref_ptr<const cnoid::Body> curRobot, const std::vector<ContactState>& contactStates, const cpp_filters::FirstOrderLowPassFilter<cnoid::Vector6>& odomBaseVel, ContactStateHolder::Ports& ports) {
   ports.m_odomBasePose_.tm = ports.m_qAct_.tm;
   eigen_rtm_conversions::poseEigenToRTM(curRobot->rootLink()->T(), ports.m_odomBasePose_.data);
   ports.m_odomBasePoseOut_.write();
@@ -309,6 +341,17 @@ bool ContactStateHolder::writeOutPortData(const std::string& instance_name, Cont
   ports.m_odomBaseVel_.tm = ports.m_qAct_.tm;
   eigen_rtm_conversions::velocityEigenToRTM(odomBaseVel.value(), ports.m_odomBaseVel_.data);
   ports.m_odomBaseVelOut_.write();
+
+  ports.m_contactState_.tm = ports.m_qAct_.tm;
+  ports.m_contactState_.data.length(contactStates.size());
+  for(int i=0;i<contactStates.size();i++){
+    ports.m_contactState_.data[i].link1 = contactStates[i].curLink1 ? contactStates[i].curLink1->name().c_str() : "";
+    eigen_rtm_conversions::poseEigenToRTM(contactStates[i].localPose1, ports.m_contactState_.data[i].local_pose);
+    ports.m_contactState_.data[i].link2 = contactStates[i].curLink2 ? contactStates[i].curLink2->name().c_str() : "";
+    ports.m_contactState_.data[i].free_x = contactStates[i].freeX;
+    ports.m_contactState_.data[i].free_y = contactStates[i].freeY;
+  }
+  ports.m_contactStateOut_.write();
 
 
   return true;
