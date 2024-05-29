@@ -14,6 +14,7 @@ ContactStateHolder::Ports::Ports() :
   m_actImuIn_("actImuIn", m_actImu_),
   m_tactileSensorIn_("tactileSensorIn", m_tactileSensor_),
   m_odomBasePoseOut_("odomBasePoseOut", m_odomBasePose_),
+  m_odomBaseTformOut_("odomBaseTformOut", m_odomBaseTform_),
   m_odomBaseVelOut_("odomBaseVelOut", m_odomBaseVel_),
   m_contactStateOut_("contactStateOut", m_contactState_),
 
@@ -25,6 +26,7 @@ void ContactStateHolder::Ports::onInitialize(ContactStateHolder* component) {
   component->addInPort("qAct", this->m_qActIn_);
   component->addInPort("actImuIn", this->m_actImuIn_);
   component->addOutPort("odomBasePoseOut", this->m_odomBasePoseOut_);
+  component->addOutPort("odomBaseTformOut", this->m_odomBaseTformOut_);
   component->addOutPort("odomBaseVelOut", this->m_odomBaseVelOut_);
   component->addOutPort("contactStateOut", this->m_contactStateOut_);
 
@@ -98,8 +100,8 @@ RTC::ReturnCode_t ContactStateHolder::onInitialize(){
         continue;
       }
       if(this->URDFToVRMLLinkNameMap_.find(sensor.linkName) != this->URDFToVRMLLinkNameMap_.end()){
-	std::string linkName = this->URDFToVRMLLinkNameMap_[sensor.linkName];
-	sensor.curLink = this->curRobot_->link(linkName);
+        std::string linkName = this->URDFToVRMLLinkNameMap_[sensor.linkName];
+        sensor.curLink = this->curRobot_->link(linkName);
         sensor.prevLink = this->prevRobot_->link(linkName);
       }else{
         std::cerr << "\x1b[31m[" << this->m_profile.instance_name << "] " << " link " << sensor.linkName << " not found" << "\e[0m" << std::endl;
@@ -173,7 +175,7 @@ RTC::ReturnCode_t ContactStateHolder::onExecute(RTC::UniqueId ec_id){
                                    this->odomBaseVel_);
 
   // curRobotと速度を出力
-  ContactStateHolder::writeOutPortData(instance_name, this->curRobot_, this->contactStates_, this->odomBaseVel_, this->ports_);
+  ContactStateHolder::writeOutPortData(instance_name, this->VRMLToURDFLinkNameMap_, this->curRobot_, this->contactStates_, this->odomBaseVel_, this->ports_);
 
   return RTC::RTC_OK;
 }
@@ -328,10 +330,22 @@ bool ContactStateHolder::calcVelocity(const std::string& instance_name, cnoid::r
   return true;
 }
 
-bool ContactStateHolder::writeOutPortData(const std::string& instance_name, cnoid::ref_ptr<const cnoid::Body> curRobot, const std::vector<ContactState>& contactStates, const cpp_filters::FirstOrderLowPassFilter<cnoid::Vector6>& odomBaseVel, ContactStateHolder::Ports& ports) {
+bool ContactStateHolder::writeOutPortData(const std::string& instance_name, const std::unordered_map<std::string, std::string>& VRMLToURDFLinkNameMap, cnoid::ref_ptr<const cnoid::Body> curRobot, const std::vector<ContactState>& contactStates, const cpp_filters::FirstOrderLowPassFilter<cnoid::Vector6>& odomBaseVel, ContactStateHolder::Ports& ports) {
   ports.m_odomBasePose_.tm = ports.m_qAct_.tm;
   eigen_rtm_conversions::poseEigenToRTM(curRobot->rootLink()->T(), ports.m_odomBasePose_.data);
   ports.m_odomBasePoseOut_.write();
+
+  ports.m_odomBaseTform_.tm = ports.m_qAct_.tm;
+  ports.m_odomBaseTform_.data.length(12);
+  for(int i=0;i<3;i++){
+    ports.m_odomBaseTform_.data[i] = curRobot->rootLink()->p()[i];
+  }
+  for(int i=0;i<3;i++){
+    for(int j=0;j<3;j++){
+      ports.m_odomBaseTform_.data[3+i*3+j] = curRobot->rootLink()->R()(i,j);// row major
+    }
+  }
+  ports.m_odomBaseTformOut_.write();
 
   ports.m_odomBaseVel_.tm = ports.m_qAct_.tm;
   eigen_rtm_conversions::velocityEigenToRTM(odomBaseVel.value(), ports.m_odomBaseVel_.data);
@@ -340,9 +354,9 @@ bool ContactStateHolder::writeOutPortData(const std::string& instance_name, cnoi
   ports.m_contactState_.tm = ports.m_qAct_.tm;
   ports.m_contactState_.data.length(contactStates.size());
   for(int i=0;i<contactStates.size();i++){
-    ports.m_contactState_.data[i].link1 = contactStates[i].curLink1 ? this->VRMLToURDFLinkNameMap_[contactStates[i].curLink1->name()].c_str() : "";
+    ports.m_contactState_.data[i].link1 = contactStates[i].curLink1 ? VRMLToURDFLinkNameMap.find(contactStates[i].curLink1->name())->second.c_str() : "";
     eigen_rtm_conversions::poseEigenToRTM(contactStates[i].localPose1, ports.m_contactState_.data[i].local_pose);
-    ports.m_contactState_.data[i].link2 = contactStates[i].curLink2 ? VRMLToURDFLinkNameMap_[contactStates[i].curLink2->name()].c_str() : "";
+    ports.m_contactState_.data[i].link2 = contactStates[i].curLink2 ? VRMLToURDFLinkNameMap.find(contactStates[i].curLink2->name())->second.c_str() : "";
     ports.m_contactState_.data[i].free_x = contactStates[i].freeX;
     ports.m_contactState_.data[i].free_y = contactStates[i].freeY;
   }

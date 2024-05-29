@@ -52,6 +52,8 @@ protected:
     RTC::InPort<RTC::TimedDoubleSeq> m_tactileSensorIn_;
     RTC::TimedPose3D m_odomBasePose_;
     RTC::OutPort<RTC::TimedPose3D> m_odomBasePoseOut_;
+    RTC::TimedDoubleSeq m_odomBaseTform_; // Generate World frame
+    RTC::OutPort<RTC::TimedDoubleSeq> m_odomBaseTformOut_; // for HrpsysSeqStateROSBridge
     RTC::TimedVelocity3D m_odomBaseVel_;
     RTC::OutPort<RTC::TimedVelocity3D> m_odomBaseVelOut_;
     contact_state_msgs::TimedContactSeq m_contactState_;
@@ -103,7 +105,7 @@ protected:
   static bool calcContactState(const std::string& instance_name, cnoid::ref_ptr<const cnoid::Body> prevRobot, const std::vector<TactileSensor>& tactileSensors, std::vector<ContactState>& contactStates);
   static bool calcOdometry(const std::string& instance_name, cnoid::ref_ptr<const cnoid::Body> prevRobot, const std::vector<ContactState>& contactStates, cnoid::BodyPtr curRobot);
   static bool calcVelocity(const std::string& instance_name, cnoid::ref_ptr<const cnoid::Body> curRobot, cnoid::ref_ptr<const cnoid::Body> prevRobot, double dt, cpp_filters::FirstOrderLowPassFilter<cnoid::Vector6>& odomBaseVel);
-  static bool writeOutPortData(const std::string& instance_name, cnoid::ref_ptr<const cnoid::Body> curRobot, const std::vector<ContactState>& contactStates, const cpp_filters::FirstOrderLowPassFilter<cnoid::Vector6>& odomBaseVel, ContactStateHolder::Ports& ports);
+  static bool writeOutPortData(const std::string& instance_name, const std::unordered_map<std::string, std::string>& VRMLToURDFLinkNameMap, cnoid::ref_ptr<const cnoid::Body> curRobot, const std::vector<ContactState>& contactStates, const cpp_filters::FirstOrderLowPassFilter<cnoid::Vector6>& odomBaseVel, ContactStateHolder::Ports& ports);
 };
 
 extern "C"
