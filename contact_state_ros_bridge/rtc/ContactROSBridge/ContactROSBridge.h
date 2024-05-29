@@ -11,13 +11,8 @@
 #include <ros/ros.h>
 #include <contact_state_msgs/ContactArray.h>
 
-#include <cnoid/Body>
-#include <unordered_map>
-
 class ContactROSBridge : public RTC::DataFlowComponentBase{
 protected:
-  cnoid::BodyPtr robot_;
-
   ros::NodeHandle nh; // これがないとうまく通信できなくなったり、CPU使用率100%になったりする
 
   std::string tf_prefix_;
@@ -30,8 +25,6 @@ protected:
   contact_state_msgs::TimedContactSeq m_contactROS_;
   RTC::OutPort <contact_state_msgs::TimedContactSeq> m_contactROSOut_;
 
-  std::unordered_map<std::string, std::string> URDFToVRMLLinkNameMap_;
-  std::unordered_map<std::string, std::string> VRMLToURDFLinkNameMap_;
 public:
   ContactROSBridge(RTC::Manager* manager);
   virtual RTC::ReturnCode_t onInitialize();

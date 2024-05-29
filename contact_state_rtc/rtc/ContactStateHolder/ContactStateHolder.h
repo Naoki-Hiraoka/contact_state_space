@@ -3,6 +3,7 @@
 
 #include <memory>
 #include <mutex>
+#include <unordered_map>
 
 #include <rtm/Manager.h>
 #include <rtm/DataFlowComponentBase.h>
@@ -13,6 +14,7 @@
 #include "ContactStateHolderService_impl.h"
 
 #include <cnoid/Body>
+#include <cnoid/SceneGraph>
 
 #include <cpp_filters/FirstOrderLowPassFilter.h>
 #include <ik_constraint2/ik_constraint2.h>
@@ -34,6 +36,9 @@ public:
 
 protected:
   std::mutex mutex_;
+
+  std::unordered_map<std::string, std::string> URDFToVRMLLinkNameMap_;
+  std::unordered_map<std::string, std::string> VRMLToURDFLinkNameMap_;
 
   class Ports {
   public:

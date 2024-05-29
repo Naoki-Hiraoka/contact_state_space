@@ -319,7 +319,7 @@ static const char* TactileOdometry_spec[] = {
   "type_name",         "TactileOdometry",
   "description",       "TactileOdometry component",
   "version",           "0.0",
-  "vendor",            "Takuma-Hiraoka",
+  "vendor",            "Naoki-Hiraoka",
   "category",          "example",
   "activity_type",     "DataFlowComponent",
   "max_instance",      "10",

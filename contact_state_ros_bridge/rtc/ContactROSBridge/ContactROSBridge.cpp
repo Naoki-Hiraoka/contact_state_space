@@ -1,8 +1,6 @@
 #include "ContactROSBridge.h"
 #include <tf2/utils.h>
 
-#include <cnoid/BodyLoader>
-#include <cnoid/SceneGraph>
 #include <eigen_rtm_conversions/eigen_rtm_conversions.h>
 #include <eigen_conversions/eigen_msg.h>
 
@@ -16,25 +14,6 @@ ContactROSBridge::ContactROSBridge(RTC::Manager* manager):
 RTC::ReturnCode_t ContactROSBridge::onInitialize(){
   addOutPort("contactOut", m_contactROSOut_);
   addInPort("contactIn", m_contactRTMIn_);
-
-  cnoid::BodyLoader bodyLoader;
-
-  std::string fileName;
-  if(this->getProperties().hasKey("model")) fileName = std::string(this->getProperties()["model"]);
-  else fileName = std::string(this->m_pManager->getConfig()["model"]); // 引数 -o で与えたプロパティを捕捉
-  this->robot_ = bodyLoader.load(fileName);
-  if(!this->robot_){
-    std::cerr << "\x1b[31m[" << m_profile.instance_name << "] " << "failed to load model[" << fileName << "]" << "\x1b[39m" << std::endl;
-    return RTC::RTC_ERROR;
-  }
-
-  for(int l=0;l<this->robot_->numLinks() ; l++){
-    cnoid::SgGroup* shape = this->robot_->link(l)->shape();
-    if(shape && shape->numChildObjects() > 0){
-      this->VRMLToURDFLinkNameMap_[this->robot_->link(l)->name()] = shape->child(0)->name();
-      this->URDFToVRMLLinkNameMap_[shape->child(0)->name()] = this->robot_->link(l)->name();
-    }
-  }
 
   ros::NodeHandle pnh("~");
 
@@ -54,19 +33,11 @@ RTC::ReturnCode_t ContactROSBridge::onExecute(RTC::UniqueId ec_id){
     msg.header.stamp = ros::Time::now();
     for(int i=0;i<m_contactRTM_.data.length();i++){
       contact_state_msgs::Contact state;
-      if(this->VRMLToURDFLinkNameMap_.find(std::string(m_contactRTM_.data[i].link1)) != this->VRMLToURDFLinkNameMap_.end()){
-        state.pose.header.frame_id = this->VRMLToURDFLinkNameMap_[std::string(m_contactRTM_.data[i].link1)];
-      }else{
-        state.pose.header.frame_id = std::string(m_contactRTM_.data[i].link1);
-      }
+      state.pose.header.frame_id = std::string(m_contactRTM_.data[i].link1);
       Eigen::Isometry3d pose;
       eigen_rtm_conversions::poseRTMToEigen(m_contactRTM_.data[i].local_pose, pose);
       tf::poseEigenToMsg(pose, state.pose.pose);
-      if(this->VRMLToURDFLinkNameMap_.find(std::string(m_contactRTM_.data[i].link2)) != this->VRMLToURDFLinkNameMap_.end()){
-        state.link = this->VRMLToURDFLinkNameMap_[std::string(m_contactRTM_.data[i].link2)];
-      }else{
-        state.link = std::string(m_contactRTM_.data[i].link2);
-      }
+      state.link = std::string(m_contactRTM_.data[i].link2);
       state.free_x = m_contactRTM_.data[i].free_x;
       state.free_y = m_contactRTM_.data[i].free_y;
       msg.contacts.push_back(state);
@@ -82,19 +53,11 @@ void ContactROSBridge::topicCallback(const contact_state_msgs::ContactArray::Con
   m_contactROS_.tm.nsec = msg->header.stamp.nsec;
   m_contactROS_.data.length(msg->contacts.size());
   for(int i=0;i<msg->contacts.size();i++){
-    if(this->URDFToVRMLLinkNameMap_.find(msg->contacts[i].pose.header.frame_id) != this->URDFToVRMLLinkNameMap_.end()){
-      m_contactRTM_.data[i].link1 = this->URDFToVRMLLinkNameMap_[msg->contacts[i].pose.header.frame_id].c_str();
-    }else{
-      m_contactRTM_.data[i].link1 = msg->contacts[i].pose.header.frame_id.c_str();
-    }
+    m_contactRTM_.data[i].link1 = msg->contacts[i].pose.header.frame_id.c_str();
     Eigen::Isometry3d pose;
     tf::poseMsgToEigen(msg->contacts[i].pose.pose, pose);
     eigen_rtm_conversions::poseEigenToRTM(pose, m_contactRTM_.data[i].local_pose);
-    if(this->URDFToVRMLLinkNameMap_.find(msg->contacts[i].link) != this->URDFToVRMLLinkNameMap_.end()){
-      m_contactRTM_.data[i].link2 = this->URDFToVRMLLinkNameMap_[msg->contacts[i].link].c_str();
-    }else{
-      m_contactRTM_.data[i].link2 = msg->contacts[i].pose.header.frame_id.c_str();
-    }
+    m_contactRTM_.data[i].link2 = msg->contacts[i].link.c_str();
     m_contactRTM_.data[i].free_x = msg->contacts[i].free_x;
     m_contactRTM_.data[i].free_y = msg->contacts[i].free_y;
   }

@@ -13,7 +13,6 @@
   <depend>roscpp</depend>
   <depend>rtmbuild2</depend>
   <depend>geometry_msgs</depend>
-  <depend>choreonoid</depend>
   <depend>eigen_rtm_conversions</depend>
   <depend>eigen_conversions</depend>
 

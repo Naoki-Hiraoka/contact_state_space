@@ -57,6 +57,13 @@ RTC::ReturnCode_t ContactStateHolder::onInitialize(){
     this->curRobot_ = robot->clone();
   }
 
+  for(int l=0;l<this->curRobot_->numLinks() ; l++){
+    cnoid::SgGroup* shape = this->curRobot_->link(l)->shape();
+    if(shape && shape->numChildObjects() > 0 && shape->child(0)->name().size()!=0){
+      this->VRMLToURDFLinkNameMap_[this->curRobot_->link(l)->name()] = shape->child(0)->name();
+      this->URDFToVRMLLinkNameMap_[shape->child(0)->name()] = this->curRobot_->link(l)->name();
+    }
+  }
 
   // load tactile_sensor_file
   {
@@ -90,22 +97,11 @@ RTC::ReturnCode_t ContactStateHolder::onInitialize(){
         std::cerr << "\x1b[31m[" << this->m_profile.instance_name << "] " << "link name is not specified" << "\e[0m" << std::endl;
         continue;
       }
-      if(this->curRobot_->link(sensor.linkName)){
-        sensor.curLink = this->curRobot_->link(sensor.linkName);
-        sensor.prevLink = this->prevRobot_->link(sensor.linkName);
+      if(this->URDFToVRMLLinkNameMap_.find(sensor.linkName) != this->URDFToVRMLLinkNameMap_.end()){
+	std::string linkName = this->URDFToVRMLLinkNameMap_[sensor.linkName];
+	sensor.curLink = this->curRobot_->link(linkName);
+        sensor.prevLink = this->prevRobot_->link(linkName);
       }else{
-        for(int l=0;l<this->curRobot_->numLinks() && !(sensor.curLink);l++){
-          cnoid::SgGroup* shape = this->curRobot_->link(l)->shape();
-          for(int j=0;j<shape->numChildObjects();j++){
-            if(shape->child(j)->name() == sensor.linkName){
-              sensor.curLink = this->curRobot_->link(l);
-              sensor.prevLink = this->prevRobot_->link(l);
-              break;
-            }
-          }
-        }
-      }
-      if (!(sensor.curLink)) {
         std::cerr << "\x1b[31m[" << this->m_profile.instance_name << "] " << " link " << sensor.linkName << " not found" << "\e[0m" << std::endl;
         continue;
       }
@@ -267,7 +263,6 @@ bool ContactStateHolder::readInPortData(const std::string& instance_name, Contac
   }
   return qAct_updated;
 }
-
 bool ContactStateHolder::calcContactState(const std::string& instance_name, cnoid::ref_ptr<const cnoid::Body> prevRobot, const std::vector<TactileSensor>& tactileSensors, std::vector<ContactState>& contactStates) {
   contactStates.clear();
   for(int i=0;i<tactileSensors.size();i++){
@@ -345,9 +340,9 @@ bool ContactStateHolder::writeOutPortData(const std::string& instance_name, cnoi
   ports.m_contactState_.tm = ports.m_qAct_.tm;
   ports.m_contactState_.data.length(contactStates.size());
   for(int i=0;i<contactStates.size();i++){
-    ports.m_contactState_.data[i].link1 = contactStates[i].curLink1 ? contactStates[i].curLink1->name().c_str() : "";
+    ports.m_contactState_.data[i].link1 = contactStates[i].curLink1 ? this->VRMLToURDFLinkNameMap_[contactStates[i].curLink1->name()].c_str() : "";
     eigen_rtm_conversions::poseEigenToRTM(contactStates[i].localPose1, ports.m_contactState_.data[i].local_pose);
-    ports.m_contactState_.data[i].link2 = contactStates[i].curLink2 ? contactStates[i].curLink2->name().c_str() : "";
+    ports.m_contactState_.data[i].link2 = contactStates[i].curLink2 ? VRMLToURDFLinkNameMap_[contactStates[i].curLink2->name()].c_str() : "";
     ports.m_contactState_.data[i].free_x = contactStates[i].freeX;
     ports.m_contactState_.data[i].free_y = contactStates[i].freeY;
   }
@@ -362,7 +357,7 @@ static const char* ContactStateHolder_spec[] = {
   "type_name",         "ContactStateHolder",
   "description",       "ContactStateHolder component",
   "version",           "0.0",
-  "vendor",            "Takuma-Hiraoka",
+  "vendor",            "Naoki-Hiraoka",
   "category",          "example",
   "activity_type",     "DataFlowComponent",
   "max_instance",      "10",
