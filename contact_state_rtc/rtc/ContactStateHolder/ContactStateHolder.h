@@ -50,6 +50,8 @@ protected:
     RTC::InPort<RTC::TimedOrientation3D> m_actImuIn_;
     RTC::TimedDoubleSeq m_tactileSensor_;
     RTC::InPort<RTC::TimedDoubleSeq> m_tactileSensorIn_;
+    RTC::TimedDoubleSeq m_dqOdom_;
+    RTC::OutPort<RTC::TimedDoubleSeq> m_dqOdomOut_;
     RTC::TimedPose3D m_odomBasePose_;
     RTC::OutPort<RTC::TimedPose3D> m_odomBasePoseOut_;
     RTC::TimedDoubleSeq m_odomBaseTform_;
@@ -95,17 +97,25 @@ protected:
 
   cnoid::BodyPtr prevRobot_;
   cnoid::BodyPtr curRobot_;
+  std::vector<cpp_filters::FirstOrderLowPassFilter<double> > dqOdom_; // cutoffを2loopぶんにするために、passFilterのdtは常に1/2[s], cutOffは1[Hz]とする.
   cpp_filters::FirstOrderLowPassFilter<cnoid::Vector6> odomBaseVel_ = cpp_filters::FirstOrderLowPassFilter<cnoid::Vector6>(3.5, cnoid::Vector6::Zero());
 
 protected:
   bool getProperty(const std::string& key, std::string& ret);
 
-  static bool curRobot2PrevRobot(const std::string& instance_name, cnoid::ref_ptr<const cnoid::Body> curRobot, cnoid::BodyPtr prevRobot);
-  static bool readInPortData(const std::string& instance_name, ContactStateHolder::Ports& ports, cnoid::BodyPtr curRobot, std::vector<TactileSensor>& tactileSensors);
-  static bool calcContactState(const std::string& instance_name, cnoid::ref_ptr<const cnoid::Body> prevRobot, const std::vector<TactileSensor>& tactileSensors, std::vector<ContactState>& contactStates);
-  static bool calcOdometry(const std::string& instance_name, cnoid::ref_ptr<const cnoid::Body> prevRobot, const std::vector<ContactState>& contactStates, cnoid::BodyPtr curRobot);
-  static bool calcVelocity(const std::string& instance_name, cnoid::ref_ptr<const cnoid::Body> curRobot, cnoid::ref_ptr<const cnoid::Body> prevRobot, double dt, cpp_filters::FirstOrderLowPassFilter<cnoid::Vector6>& odomBaseVel);
-  static bool writeOutPortData(const std::string& instance_name, const std::unordered_map<std::string, std::string>& VRMLToURDFLinkNameMap, cnoid::ref_ptr<const cnoid::Body> curRobot, const std::vector<ContactState>& contactStates, const cpp_filters::FirstOrderLowPassFilter<cnoid::Vector6>& odomBaseVel, ContactStateHolder::Ports& ports);
+  static bool curRobot2PrevRobot(const std::string& instance_name, cnoid::ref_ptr<const cnoid::Body> curRobot,
+                                 cnoid::BodyPtr prevRobot);
+  static bool readInPortData(const std::string& instance_name, ContactStateHolder::Ports& ports,
+                             cnoid::BodyPtr curRobot, std::vector<TactileSensor>& tactileSensors);
+  static bool calcContactState(const std::string& instance_name, cnoid::ref_ptr<const cnoid::Body> prevRobot, const std::vector<TactileSensor>& tactileSensors,
+                               std::vector<ContactState>& contactStates);
+  static bool calcOdometry(const std::string& instance_name, cnoid::ref_ptr<const cnoid::Body> prevRobot, const std::vector<ContactState>& contactStates,
+                           cnoid::BodyPtr curRobot);
+  static bool calcVelocity(const std::string& instance_name, cnoid::ref_ptr<const cnoid::Body> prevRobot, double dt,
+                           cnoid::BodyPtr curRobot,
+                           std::vector<cpp_filters::FirstOrderLowPassFilter<double> >& dqOdom, cpp_filters::FirstOrderLowPassFilter<cnoid::Vector6>& odomBaseVel);
+  static bool writeOutPortData(const std::string& instance_name, const std::unordered_map<std::string, std::string>& VRMLToURDFLinkNameMap, cnoid::ref_ptr<const cnoid::Body> curRobot, const std::vector<ContactState>& contactStates,
+                               ContactStateHolder::Ports& ports);
 };
 
 extern "C"

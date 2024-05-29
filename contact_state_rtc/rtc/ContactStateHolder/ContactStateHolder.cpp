@@ -13,6 +13,7 @@ ContactStateHolder::Ports::Ports() :
   m_qActIn_("qAct", m_qAct_),
   m_actImuIn_("actImuIn", m_actImu_),
   m_tactileSensorIn_("tactileSensorIn", m_tactileSensor_),
+  m_dqOdomOut_("dqOdomOut", m_dqOdom_),
   m_odomBasePoseOut_("odomBasePoseOut", m_odomBasePose_),
   m_odomBaseTformOut_("odomBaseTformOut", m_odomBaseTform_),
   m_odomBaseVelOut_("odomBaseVelOut", m_odomBaseVel_),
@@ -25,6 +26,7 @@ void ContactStateHolder::Ports::onInitialize(ContactStateHolder* component) {
   component->addInPort("tactileSensorIn", this->m_tactileSensorIn_);
   component->addInPort("qAct", this->m_qActIn_);
   component->addInPort("actImuIn", this->m_actImuIn_);
+  component->addOutPort("dqOdomOut", this->m_dqOdomOut_);
   component->addOutPort("odomBasePoseOut", this->m_odomBasePoseOut_);
   component->addOutPort("odomBaseTformOut", this->m_odomBaseTformOut_);
   component->addOutPort("odomBaseVelOut", this->m_odomBaseVelOut_);
@@ -67,6 +69,8 @@ RTC::ReturnCode_t ContactStateHolder::onInitialize(){
       this->URDFToVRMLLinkNameMap_[shape->child(0)->name()] = this->curRobot_->link(l)->name();
     }
   }
+
+  this->dqOdom_.resize(this->curRobot_->numJoints(), cpp_filters::FirstOrderLowPassFilter<double>(1.0, 0.0));
 
   // load tactile_sensor_file
   {
@@ -172,11 +176,12 @@ RTC::ReturnCode_t ContactStateHolder::onExecute(RTC::UniqueId ec_id){
                                    this->curRobot_);
 
   // curRobotとprevRobotから速度を計算.
-  ContactStateHolder::calcVelocity(instance_name, this->curRobot_, this->prevRobot_, dt,
-                                   this->odomBaseVel_);
+  ContactStateHolder::calcVelocity(instance_name, this->prevRobot_, dt,
+                                   this->curRobot_,
+                                   this->dqOdom_, this->odomBaseVel_);
 
   // curRobotと速度を出力
-  ContactStateHolder::writeOutPortData(instance_name, this->VRMLToURDFLinkNameMap_, this->curRobot_, this->contactStates_, this->odomBaseVel_, this->ports_);
+  ContactStateHolder::writeOutPortData(instance_name, this->VRMLToURDFLinkNameMap_, this->curRobot_, this->contactStates_, this->ports_);
 
   return RTC::RTC_OK;
 }
@@ -318,7 +323,17 @@ bool ContactStateHolder::calcOdometry(const std::string& instance_name, cnoid::r
   return true;
 }
 
-bool ContactStateHolder::calcVelocity(const std::string& instance_name, cnoid::ref_ptr<const cnoid::Body> curRobot, cnoid::ref_ptr<const cnoid::Body> prevRobot, double dt, cpp_filters::FirstOrderLowPassFilter<cnoid::Vector6>& odomBaseVel) {
+bool ContactStateHolder::calcVelocity(const std::string& instance_name, cnoid::ref_ptr<const cnoid::Body> prevRobot, double dt,
+                                      cnoid::BodyPtr curRobot,
+                                      std::vector<cpp_filters::FirstOrderLowPassFilter<double> >& dqOdom, cpp_filters::FirstOrderLowPassFilter<cnoid::Vector6>& odomBaseVel) {
+  {
+    for(int i=0;i<curRobot->numJoints();i++){
+      // cutoffを2loopぶんにするために、passFilterのdtは常に1/2[s], cutOffは1[Hz]とする.
+      dqOdom[i].passFilter((curRobot->joint(i)->q() - prevRobot->joint(i)->q()) / dt, 0.5);
+      curRobot->joint(i)->dq() = dqOdom[i].value();
+    }
+  }
+
   {
     cnoid::Isometry3 diff = curRobot->rootLink()->T() * prevRobot->rootLink()->T().inverse();
     cnoid::Vector6 vel;
@@ -326,12 +341,22 @@ bool ContactStateHolder::calcVelocity(const std::string& instance_name, cnoid::r
     cnoid::AngleAxisd dr(diff.linear());
     vel.tail<3>() = dr.axis() * dr.angle() / dt;
     odomBaseVel.passFilter(vel, dt);
+    curRobot->rootLink()->v() = odomBaseVel.value().head<3>();
+    curRobot->rootLink()->w() = odomBaseVel.value().tail<3>();
   }
 
   return true;
 }
 
-bool ContactStateHolder::writeOutPortData(const std::string& instance_name, const std::unordered_map<std::string, std::string>& VRMLToURDFLinkNameMap, cnoid::ref_ptr<const cnoid::Body> curRobot, const std::vector<ContactState>& contactStates, const cpp_filters::FirstOrderLowPassFilter<cnoid::Vector6>& odomBaseVel, ContactStateHolder::Ports& ports) {
+bool ContactStateHolder::writeOutPortData(const std::string& instance_name, const std::unordered_map<std::string, std::string>& VRMLToURDFLinkNameMap, cnoid::ref_ptr<const cnoid::Body> curRobot, const std::vector<ContactState>& contactStates,
+                                          ContactStateHolder::Ports& ports) {
+  ports.m_dqOdom_.tm = ports.m_qAct_.tm;
+  ports.m_dqOdom_.data.length(curRobot->numJoints());
+  for(int i=0;i<curRobot->numJoints();i++){
+    ports.m_dqOdom_.data[i] = curRobot->joint(i)->dq();
+  }
+  ports.m_dqOdomOut_.write();
+
   ports.m_odomBasePose_.tm = ports.m_qAct_.tm;
   eigen_rtm_conversions::poseEigenToRTM(curRobot->rootLink()->T(), ports.m_odomBasePose_.data);
   ports.m_odomBasePoseOut_.write();
@@ -349,7 +374,7 @@ bool ContactStateHolder::writeOutPortData(const std::string& instance_name, cons
   ports.m_odomBaseTformOut_.write();
 
   ports.m_odomBaseVel_.tm = ports.m_qAct_.tm;
-  eigen_rtm_conversions::velocityEigenToRTM(odomBaseVel.value(), ports.m_odomBaseVel_.data);
+  eigen_rtm_conversions::velocityEigenToRTM(curRobot->rootLink()->v(), curRobot->rootLink()->w(), ports.m_odomBaseVel_.data);
   ports.m_odomBaseVelOut_.write();
 
   ports.m_contactState_.tm = ports.m_qAct_.tm;
