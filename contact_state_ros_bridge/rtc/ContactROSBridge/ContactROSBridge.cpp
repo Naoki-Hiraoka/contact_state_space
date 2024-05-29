@@ -27,7 +27,7 @@ RTC::ReturnCode_t ContactROSBridge::onExecute(RTC::UniqueId ec_id){
   ros::spinOnce();
 
   if(this->m_contactRTMIn_.isNew()){
-    this->m_contactRTMIn_.read();
+    while(this->m_contactRTMIn_.isNew()) this->m_contactRTMIn_.read();
 
     contact_state_msgs::ContactArray msg;
     msg.header.stamp = ros::Time::now();

@@ -52,7 +52,7 @@ protected:
     RTC::InPort<RTC::TimedDoubleSeq> m_tactileSensorIn_;
     RTC::TimedPose3D m_odomBasePose_;
     RTC::OutPort<RTC::TimedPose3D> m_odomBasePoseOut_;
-    RTC::TimedDoubleSeq m_odomBaseTform_; // Generate World frame
+    RTC::TimedDoubleSeq m_odomBaseTform_;
     RTC::OutPort<RTC::TimedDoubleSeq> m_odomBaseTformOut_; // for HrpsysSeqStateROSBridge
     RTC::TimedVelocity3D m_odomBaseVel_;
     RTC::OutPort<RTC::TimedVelocity3D> m_odomBaseVelOut_;

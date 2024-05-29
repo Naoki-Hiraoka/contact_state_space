@@ -43,6 +43,7 @@ ContactStateHolder::ContactStateHolder(RTC::Manager* manager):
 }
 
 RTC::ReturnCode_t ContactStateHolder::onInitialize(){
+  std::cerr << "[" << m_profile.instance_name << "] onInitialize()" << std::endl;
   this->ports_.onInitialize(this);
 
   {
@@ -228,7 +229,7 @@ bool ContactStateHolder::curRobot2PrevRobot(const std::string& instance_name, cn
 bool ContactStateHolder::readInPortData(const std::string& instance_name, ContactStateHolder::Ports& ports, cnoid::BodyPtr curRobot, std::vector<TactileSensor>& tactileSensors) {
   bool qAct_updated = false;
   if(ports.m_qActIn_.isNew()){
-    ports.m_qActIn_.read();
+    while(ports.m_qActIn_.isNew()) ports.m_qActIn_.read();
     qAct_updated = true;
     if(ports.m_qAct_.data.length() == curRobot->numJoints()){
       for(int i=0;i<ports.m_qAct_.data.length();i++){
@@ -238,7 +239,7 @@ bool ContactStateHolder::readInPortData(const std::string& instance_name, Contac
     }
   }
   if(ports.m_actImuIn_.isNew()){
-    ports.m_actImuIn_.read();
+    while(ports.m_actImuIn_.isNew()) ports.m_actImuIn_.read();
     if(std::isfinite(ports.m_actImu_.data.r) && std::isfinite(ports.m_actImu_.data.p) && std::isfinite(ports.m_actImu_.data.y)){
       curRobot->calcForwardKinematics();
       cnoid::RateGyroSensorPtr imu = curRobot->findDevice<cnoid::RateGyroSensor>("gyrometer");
@@ -253,7 +254,7 @@ bool ContactStateHolder::readInPortData(const std::string& instance_name, Contac
   curRobot->calcForwardKinematics();
 
   if(ports.m_tactileSensorIn_.isNew()){
-    ports.m_tactileSensorIn_.read();
+    while(ports.m_tactileSensorIn_.isNew()) ports.m_tactileSensorIn_.read();
     if(ports.m_tactileSensor_.data.length() == tactileSensors.size() * 3){
       for (int i=0; i<tactileSensors.size(); i++) {
         // TODO threshould
