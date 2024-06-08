@@ -138,6 +138,29 @@ RTC::ReturnCode_t ContactStateHolder::onInitialize(){
     }
   }
 
+  // load shm_key
+  //   shm_keyが与えられた場合は共有メモリから、そうでなければInportから接触状態を受け取る.
+  //   tactile sensorの配列をOpenRTMで送る場合にはsubscription_typeに関係なくなぜか時間がかかるので、直接共有メモリから読んだほうが速い
+  {
+    std::string shm_key_str; this->getProperty("shm_key", shm_key_str);
+    if(shm_key_str != ""){
+      int shm_key = std::stoi(shm_key_str);
+      std::cerr << this->m_profile.instance_name << "] shmget " << shm_key << std::endl;
+      int shm_id = shmget(shm_key, sizeof(struct tactile_shm), 0666|IPC_CREAT);
+      if(shm_id == -1) {
+        std::cerr << "\x1b[31m[" << this->m_profile.instance_name << "] " << " shmget failed" << "\x1b[39m" << std::endl;
+        return RTC::RTC_ERROR;
+      }else{
+        this->ports_.t_shm_ = (struct tactile_shm *)shmat(shm_id, (void *)0, 0);
+        if(this->ports_.t_shm_ == (void*)-1) {
+          std::cerr << "\x1b[31m[" << this->m_profile.instance_name << "] " << " shmat failed" << "\x1b[39m" << std::endl;
+          return RTC::RTC_ERROR;
+        }
+      }
+    }
+  }
+
+
   return RTC::RTC_OK;
 }
 
@@ -258,8 +281,15 @@ bool ContactStateHolder::readInPortData(const std::string& instance_name, Contac
   }
   curRobot->calcForwardKinematics();
 
-  if(ports.m_tactileSensorIn_.isNew()){
-    while(ports.m_tactileSensorIn_.isNew()) ports.m_tactileSensorIn_.read();
+  if(ports.t_shm_ || ports.m_tactileSensorIn_.isNew()){
+    if(ports.t_shm_){
+      ports.m_tactileSensor_.data.length(tactileSensors.size() * 3);
+      for (int i=0; i < tactileSensors.size()*3; i++) {
+        ports.m_tactileSensor_.data[i] = ports.t_shm_->contact_force[i/3][i%3];
+      }
+    }else{
+      while(ports.m_tactileSensorIn_.isNew()) ports.m_tactileSensorIn_.read();
+    }
     if(ports.m_tactileSensor_.data.length() == tactileSensors.size() * 3){
       for (int i=0; i<tactileSensors.size(); i++) {
         // TODO threshould

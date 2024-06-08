@@ -21,6 +21,8 @@
 
 #include <contact_state_msgs/idl/ContactState.hh>
 
+#include "tactile_shm.h"
+
 class ContactStateHolder : public RTC::DataFlowComponentBase{
 public:
   ContactStateHolder(RTC::Manager* manager);
@@ -62,6 +64,8 @@ protected:
     RTC::OutPort<contact_state_msgs::TimedContactSeq> m_contactStateOut_;
     ContactStateHolderService_impl m_service0_;
     RTC::CorbaPort m_ContactStateHolderServicePort_;
+
+    struct tactile_shm *t_shm_ = nullptr;
   };
   Ports ports_;
 
