@@ -358,10 +358,9 @@ bool ContactStateHolder::calcVelocity(const std::string& instance_name, cnoid::r
   }
 
   {
-    cnoid::Isometry3 diff = curRobot->rootLink()->T() * prevRobot->rootLink()->T().inverse();
     cnoid::Vector6 vel;
-    vel.head<3>() = diff.translation() / dt;
-    cnoid::AngleAxisd dr(diff.linear());
+    vel.head<3>() = (curRobot->rootLink()->p() - prevRobot->rootLink()->p()) / dt;
+    cnoid::AngleAxisd dr(curRobot->rootLink()->R()*prevRobot->rootLink()->R().inverse());
     vel.tail<3>() = dr.axis() * dr.angle() / dt;
     odomBaseVel.passFilter(vel, dt);
     curRobot->rootLink()->v() = odomBaseVel.value().head<3>();
