@@ -29,13 +29,6 @@ module contact_state_rtc
     boolean getContactStateHolderParam(out ContactStateHolderParam o_param);
 
     /**
-     * @brief Set position of robot's root link.
-     * @param pose is input position (world frame)
-     * @return true if set successfully, false otherwise
-     */
-    boolean setRobotPos(in RTC::Point3D pos);
-
-    /**
      * @brief Set pose of robot's root link.
      * @param pose is input pose (world frame)
      * @return true if set successfully, false otherwise

@@ -217,13 +217,6 @@ bool ContactStateHolder::getContactStateHolderParam(contact_state_rtc::ContactSt
   return true;
 }
 
-bool ContactStateHolder::setRobotPos(const RTC::Point3D& pos) {
-  std::lock_guard<std::mutex> guard(this->mutex_);
-  if(!std::isfinite(pos.x) || !std::isfinite(pos.y) || !std::isfinite(pos.z)) return false;
-  eigen_rtm_conversions::pointRTMToEigen(pos, this->curRobot_->rootLink()->p());
-  return true;
-}
-
 bool ContactStateHolder::setRobotPose(const RTC::Pose3D& pose){
   std::lock_guard<std::mutex> guard(this->mutex_);
   if(!std::isfinite(pose.position.x) || !std::isfinite(pose.position.y) || !std::isfinite(pose.position.z)) return false;

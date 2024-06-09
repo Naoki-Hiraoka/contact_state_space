@@ -15,7 +15,6 @@ public:
 
   CORBA::Boolean setContactStateHolderParam(const contact_state_rtc::ContactStateHolderService::ContactStateHolderParam& i_param);
   CORBA::Boolean getContactStateHolderParam(contact_state_rtc::ContactStateHolderService::ContactStateHolderParam_out o_param);
-  CORBA::Boolean setRobotPos(const RTC::Point3D& pos);
   CORBA::Boolean setRobotPose(const RTC::Pose3D& pose);
 
   void setComponent(ContactStateHolder *i_component);

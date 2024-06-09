@@ -33,7 +33,6 @@ public:
 
   bool setContactStateHolderParam(const contact_state_rtc::ContactStateHolderService::ContactStateHolderParam& i_param);
   bool getContactStateHolderParam(contact_state_rtc::ContactStateHolderService::ContactStateHolderParam& o_param);
-  bool setRobotPos(const RTC::Point3D& pos);
   bool setRobotPose(const RTC::Pose3D& pose);
 
 protected:
