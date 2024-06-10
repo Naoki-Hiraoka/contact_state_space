@@ -37,6 +37,7 @@ public:
 
 protected:
   std::mutex mutex_;
+  int debugLevel_ = 0; // 1: time measure. 2: verbose
 
   std::unordered_map<std::string, std::string> URDFToVRMLLinkNameMap_;
   std::unordered_map<std::string, std::string> VRMLToURDFLinkNameMap_;
@@ -49,7 +50,7 @@ protected:
     RTC::InPort<RTC::TimedDoubleSeq> m_qActIn_;
     RTC::TimedOrientation3D m_actImu_; // Actual Imu World Frame. robotのgyrometerという名のRateGyroSensorの傾きを表す
     RTC::InPort<RTC::TimedOrientation3D> m_actImuIn_;
-    RTC::TimedDoubleSeq m_tactileSensor_;
+    RTC::TimedDoubleSeq m_tactileSensor_; // 常にサイズはセンサ数*3であることを保証.
     RTC::InPort<RTC::TimedDoubleSeq> m_tactileSensorIn_;
     RTC::TimedDoubleSeq m_dqOdom_;
     RTC::OutPort<RTC::TimedDoubleSeq> m_dqOdomOut_;
@@ -78,9 +79,6 @@ protected:
     cnoid::Isometry3 localPose = cnoid::Isometry3::Identity(); // リンク座標系でどこに取り付けられているか．センサzがリンク内側方向
 
     std::shared_ptr<ik_constraint2::PositionConstraint> ikc = std::make_shared<ik_constraint2::PositionConstraint>(); // A_linkにcurLink. A_localposにlocalPose. Bは未定義.
-
-    // from sensor
-    bool isContact = false;
   };
   std::vector<TactileSensor> tactileSensors_;
 
@@ -109,8 +107,8 @@ protected:
   static bool curRobot2PrevRobot(const std::string& instance_name, cnoid::ref_ptr<const cnoid::Body> curRobot,
                                  cnoid::BodyPtr prevRobot);
   static bool readInPortData(const std::string& instance_name, ContactStateHolder::Ports& ports,
-                             cnoid::BodyPtr curRobot, std::vector<TactileSensor>& tactileSensors);
-  static bool calcContactState(const std::string& instance_name, cnoid::ref_ptr<const cnoid::Body> prevRobot, const std::vector<TactileSensor>& tactileSensors,
+                             cnoid::BodyPtr curRobot, const std::vector<TactileSensor>& tactileSensors);
+  static bool calcContactState(const std::string& instance_name, cnoid::ref_ptr<const cnoid::Body> prevRobot, const std::vector<TactileSensor>& tactileSensors, const RTC::TimedDoubleSeq& m_tactileSensor, const tactile_shm *t_shm,
                                std::vector<ContactState>& contactStates);
   static bool calcOdometry(const std::string& instance_name, cnoid::ref_ptr<const cnoid::Body> prevRobot, const std::vector<ContactState>& contactStates,
                            cnoid::BodyPtr curRobot);

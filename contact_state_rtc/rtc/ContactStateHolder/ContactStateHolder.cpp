@@ -6,6 +6,7 @@
 #include <cnoid/EigenUtil>
 #include <eigen_rtm_conversions/eigen_rtm_conversions.h>
 #include <sr_inverse_kinematics_solver/sr_inverse_kinematics_solver.h>
+#include <cnoid/TimeMeasure>
 
 #include "MathUtil.h"
 
@@ -137,6 +138,8 @@ RTC::ReturnCode_t ContactStateHolder::onInitialize(){
       this->tactileSensors_.push_back(sensor);
     }
   }
+  this->ports_.m_tactileSensor_.data.length(this->tactileSensors_.size() * 3);
+  for(int i=0;i<this->ports_.m_tactileSensor_.data.length();i++) this->ports_.m_tactileSensor_.data[i] = 0.0;
 
   // load shm_key
   //   shm_keyが与えられた場合は共有メモリから、そうでなければInportから接触状態を受け取る.
@@ -181,9 +184,14 @@ RTC::ReturnCode_t ContactStateHolder::onExecute(RTC::UniqueId ec_id){
   const std::string instance_name = std::string(this->m_profile.instance_name);
   const double dt = 1.0 / this->get_context(ec_id)->get_rate();
 
+  cnoid::TimeMeasure timer;
+  if(this->debugLevel_ > 0) timer.begin();
+
   // curRobotをprevRobotへコピー
   ContactStateHolder::curRobot2PrevRobot(instance_name, this->curRobot_,
                                          this->prevRobot_);
+
+  if(this->debugLevel_ > 0) std::cerr << "1: " << timer.measure() << "[s]." << std::endl;
 
   // InPortの値をcurRobotへ反映
   if(!ContactStateHolder::readInPortData(instance_name, this->ports_,
@@ -191,20 +199,31 @@ RTC::ReturnCode_t ContactStateHolder::onExecute(RTC::UniqueId ec_id){
     return RTC::RTC_OK;  // q が届かなければ何もしない
   }
 
-  ContactStateHolder::calcContactState(instance_name, this->prevRobot_, this->tactileSensors_,
+  if(this->debugLevel_ > 0) std::cerr << "2: " << timer.measure() << "[s]." << std::endl;
+
+  ContactStateHolder::calcContactState(instance_name, this->prevRobot_, this->tactileSensors_, this->ports_.m_tactileSensor_, this->ports_.t_shm_,
                                        this->contactStates_);
+
+  if(this->debugLevel_ > 0) std::cerr << "3: " << timer.measure() << "[s]." << std::endl;
 
   // Odometryを計算. curRobotの姿勢を更新
   ContactStateHolder::calcOdometry(instance_name, this->prevRobot_, this->contactStates_,
                                    this->curRobot_);
+
+  if(this->debugLevel_ > 0) std::cerr << "4: " << timer.measure() << "[s]." << std::endl;
 
   // curRobotとprevRobotから速度を計算.
   ContactStateHolder::calcVelocity(instance_name, this->prevRobot_, dt,
                                    this->curRobot_,
                                    this->dqOdom_, this->odomBaseVel_);
 
+  if(this->debugLevel_ > 0) std::cerr << "5: " << timer.measure() << "[s]." << std::endl;
+
   // curRobotと速度を出力
   ContactStateHolder::writeOutPortData(instance_name, this->VRMLToURDFLinkNameMap_, this->curRobot_, this->contactStates_, this->ports_);
+
+  if(this->debugLevel_ > 0) std::cerr << "6: " << timer.measure() << "[s]." << std::endl;
+
 
   return RTC::RTC_OK;
 }
@@ -247,7 +266,7 @@ bool ContactStateHolder::curRobot2PrevRobot(const std::string& instance_name, cn
   return true;
 }
 
-bool ContactStateHolder::readInPortData(const std::string& instance_name, ContactStateHolder::Ports& ports, cnoid::BodyPtr curRobot, std::vector<TactileSensor>& tactileSensors) {
+bool ContactStateHolder::readInPortData(const std::string& instance_name, ContactStateHolder::Ports& ports, cnoid::BodyPtr curRobot, const std::vector<TactileSensor>& tactileSensors) {
   bool qAct_updated = false;
   if(ports.m_qActIn_.isNew()){
     while(ports.m_qActIn_.isNew()) ports.m_qActIn_.read();
@@ -274,30 +293,30 @@ bool ContactStateHolder::readInPortData(const std::string& instance_name, Contac
   }
   curRobot->calcForwardKinematics();
 
-  if(ports.t_shm_ || ports.m_tactileSensorIn_.isNew()){
-    if(ports.t_shm_){
-      ports.m_tactileSensor_.data.length(tactileSensors.size() * 3);
-      for (int i=0; i < tactileSensors.size()*3; i++) {
-        ports.m_tactileSensor_.data[i] = ports.t_shm_->contact_force[i/3][i%3];
-      }
-    }else{
+  if(!ports.t_shm_){
+    if(ports.m_tactileSensorIn_.isNew()){
       while(ports.m_tactileSensorIn_.isNew()) ports.m_tactileSensorIn_.read();
-    }
-    if(ports.m_tactileSensor_.data.length() == tactileSensors.size() * 3){
-      for (int i=0; i<tactileSensors.size(); i++) {
-        // TODO threshould
-        tactileSensors[i].isContact = (ports.m_tactileSensor_.data[i*3+2] != 0.0);
+
+      if(ports.m_tactileSensor_.data.length() != tactileSensors.size() * 3){
+        std::cerr << "[" << instance_name << "] " << "m_tactileSensor size mismatch!" << std::endl;
+        ports.m_tactileSensor_.data.length(tactileSensors.size() * 3);
+        for(int i=0;i<ports.m_tactileSensor_.data.length();i++) ports.m_tactileSensor_.data[i] = 0.0;
       }
-    }else{
-      std::cerr << "[" << instance_name << "] " << "tactile sensor dimension mismatch!" << std::endl;
     }
   }
+
   return qAct_updated;
 }
-bool ContactStateHolder::calcContactState(const std::string& instance_name, cnoid::ref_ptr<const cnoid::Body> prevRobot, const std::vector<TactileSensor>& tactileSensors, std::vector<ContactState>& contactStates) {
+bool ContactStateHolder::calcContactState(const std::string& instance_name, cnoid::ref_ptr<const cnoid::Body> prevRobot, const std::vector<TactileSensor>& tactileSensors, const RTC::TimedDoubleSeq& m_tactileSensor, const tactile_shm *t_shm, std::vector<ContactState>& contactStates) {
   contactStates.clear();
   for(int i=0;i<tactileSensors.size();i++){
-    if(!tactileSensors[i].isContact) continue;
+    if(t_shm){
+      // TODO threshould
+      if(t_shm->contact_force[i][2] == 0.0) continue;
+    }else{
+      // TODO threshould
+      if(m_tactileSensor.data[i*3+2] == 0.0) continue;
+    }
     ContactState contact;
     contact.prevLink1 = tactileSensors[i].prevLink;
     contact.curLink1 = tactileSensors[i].curLink;
