@@ -336,8 +336,8 @@ bool ContactStateHolder::calcOdometry(const std::string& instance_name, cnoid::r
   variables.push_back(curRobot->rootLink());
 
   sr_inverse_kinematics_solver::IKParam param;
-  param.maxIteration = 3;
-  param.minIteration = 3;
+  param.maxIteration = 1;
+  param.minIteration = 1;
   param.dqWeight = std::vector<double>{1.0, 1.0, 1.0, 0.0, 0.0, 1.0};
   //param.debugLevel = 1;
 
