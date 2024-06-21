@@ -201,8 +201,8 @@ RTC::ReturnCode_t ContactStateHolder::onExecute(RTC::UniqueId ec_id){
 
   if(this->debugLevel_ > 0) std::cerr << "2: " << timer.measure() << "[s]." << std::endl;
 
-  ContactStateHolder::calcContactState(instance_name, this->prevRobot_, this->tactileSensors_, this->ports_.m_tactileSensor_, this->ports_.t_shm_,
-                                       this->contactStates_);
+  ContactStateHolder::calcContactState(instance_name, this->prevRobot_, this->ports_.m_tactileSensor_, this->ports_.t_shm_, dt,
+                                       this->tactileSensors_, this->contactStates_);
 
   if(this->debugLevel_ > 0) std::cerr << "3: " << timer.measure() << "[s]." << std::endl;
 
@@ -307,16 +307,25 @@ bool ContactStateHolder::readInPortData(const std::string& instance_name, Contac
 
   return qAct_updated;
 }
-bool ContactStateHolder::calcContactState(const std::string& instance_name, cnoid::ref_ptr<const cnoid::Body> prevRobot, const std::vector<TactileSensor>& tactileSensors, const RTC::TimedDoubleSeq& m_tactileSensor, const tactile_shm *t_shm, std::vector<ContactState>& contactStates) {
+bool ContactStateHolder::calcContactState(const std::string& instance_name, cnoid::ref_ptr<const cnoid::Body> prevRobot, const RTC::TimedDoubleSeq& m_tactileSensor, const tactile_shm *t_shm, double dt, std::vector<TactileSensor>& tactileSensors, std::vector<ContactState>& contactStates) {
   contactStates.clear();
   for(int i=0;i<tactileSensors.size();i++){
+    bool sensorContact = true;
     if(t_shm){
       // TODO threshould
-      if(t_shm->contact_force[i][2] == 0.0) continue;
+      if(t_shm->contact_force[i][2] == 0.0) sensorContact = false;
     }else{
       // TODO threshould
-      if(m_tactileSensor.data[i*3+2] == 0.0) continue;
+      if(m_tactileSensor.data[i*3+2] == 0.0) sensorContact = false;
     }
+
+    if(sensorContact){
+      tactileSensors[i].time = 0.0;
+    }else{
+      tactileSensors[i].time += dt;
+      if(tactileSensors[i].time >= 0.01) continue; // チャタリング防止
+    }
+
     ContactState contact;
     contact.prevLink1 = tactileSensors[i].prevLink;
     contact.curLink1 = tactileSensors[i].curLink;

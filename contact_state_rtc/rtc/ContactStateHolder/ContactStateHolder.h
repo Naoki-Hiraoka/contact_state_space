@@ -78,6 +78,7 @@ protected:
     cnoid::LinkPtr curLink = nullptr;  // 親リンク
     cnoid::Isometry3 localPose = cnoid::Isometry3::Identity(); // リンク座標系でどこに取り付けられているか．センサzがリンク内側方向
 
+    double time = 1e3; // 非接触になってからの経過時間
     std::shared_ptr<ik_constraint2::PositionConstraint> ikc = std::make_shared<ik_constraint2::PositionConstraint>(); // A_linkにcurLink. A_localposにlocalPose. Bは未定義.
   };
   std::vector<TactileSensor> tactileSensors_;
@@ -108,8 +109,8 @@ protected:
                                  cnoid::BodyPtr prevRobot);
   static bool readInPortData(const std::string& instance_name, ContactStateHolder::Ports& ports,
                              cnoid::BodyPtr curRobot, const std::vector<TactileSensor>& tactileSensors);
-  static bool calcContactState(const std::string& instance_name, cnoid::ref_ptr<const cnoid::Body> prevRobot, const std::vector<TactileSensor>& tactileSensors, const RTC::TimedDoubleSeq& m_tactileSensor, const tactile_shm *t_shm,
-                               std::vector<ContactState>& contactStates);
+  static bool calcContactState(const std::string& instance_name, cnoid::ref_ptr<const cnoid::Body> prevRobot, const RTC::TimedDoubleSeq& m_tactileSensor, const tactile_shm *t_shm, double dt,
+                               std::vector<TactileSensor>& tactileSensors, std::vector<ContactState>& contactStates);
   static bool calcOdometry(const std::string& instance_name, cnoid::ref_ptr<const cnoid::Body> prevRobot, const std::vector<ContactState>& contactStates,
                            cnoid::BodyPtr curRobot);
   static bool calcVelocity(const std::string& instance_name, cnoid::ref_ptr<const cnoid::Body> prevRobot, double dt,
