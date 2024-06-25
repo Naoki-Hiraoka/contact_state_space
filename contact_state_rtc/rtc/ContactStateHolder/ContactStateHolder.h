@@ -79,6 +79,7 @@ protected:
     cnoid::Isometry3 localPose = cnoid::Isometry3::Identity(); // リンク座標系でどこに取り付けられているか．センサzがリンク内側方向
 
     double time = 1e3; // 非接触になってからの経過時間
+    cnoid::Vector3 lastP = cnoid::Vector3::Zero(); // 最後に接触したときの位置 world frame.
     std::shared_ptr<ik_constraint2::PositionConstraint> ikc = std::make_shared<ik_constraint2::PositionConstraint>(); // A_linkにcurLink. A_localposにlocalPose. Bは未定義.
   };
   std::vector<TactileSensor> tactileSensors_;
@@ -92,6 +93,8 @@ protected:
     cnoid::LinkPtr curLink2;
     bool freeX = false;
     bool freeY = false;
+    cnoid::Vector3 force = cnoid::Vector3::Zero();
+    double time = 0.0; // 非接触になってからの経過時間
 
     std::shared_ptr<ik_constraint2::PositionConstraint> ikc;
   };

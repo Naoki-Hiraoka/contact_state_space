@@ -313,7 +313,8 @@ bool ContactStateHolder::calcContactState(const std::string& instance_name, cnoi
     bool sensorContact = true;
     if(t_shm){
       // TODO threshould
-      if(t_shm->contact_force[i][2] == 0.0) sensorContact = false;
+      //if(t_shm->contact_force[i][2] == 0.0) sensorContact = false;
+      if(t_shm->contact_force[i][2] <= 0.0) sensorContact = false;
     }else{
       // TODO threshould
       if(m_tactileSensor.data[i*3+2] == 0.0) sensorContact = false;
@@ -321,9 +322,14 @@ bool ContactStateHolder::calcContactState(const std::string& instance_name, cnoi
 
     if(sensorContact){
       tactileSensors[i].time = 0.0;
+      tactileSensors[i].lastP = tactileSensors[i].prevLink->T() * tactileSensors[i].localPose.translation();
     }else{
       tactileSensors[i].time += dt;
-      if(tactileSensors[i].time >= 0.01) continue; // チャタリング防止
+      if(tactileSensors[i].time >= 0.2) continue; // チャタリング防止. 閾値は大きい方がよい
+      if((tactileSensors[i].lastP - (tactileSensors[i].prevLink->T() * tactileSensors[i].localPose.translation())).norm() >= 0.01) { // timeの閾値を大きくするかわりにこちらで弾く
+        tactileSensors[i].time = 1e3;
+        continue;
+      }
     }
 
     ContactState contact;
@@ -334,6 +340,12 @@ bool ContactStateHolder::calcContactState(const std::string& instance_name, cnoi
     contact.curLink2 = nullptr;
     contact.freeX = false;
     contact.freeY = false;
+    if(t_shm){
+      for(int j=0;j<3;j++) contact.force[j] = t_shm->contact_force[i][j];
+    }else{
+      for(int j=0;j<3;j++) contact.force[j] = m_tactileSensor.data[i*3+j];
+    }
+    contact.time = tactileSensors[i].time;
     contact.ikc = tactileSensors[i].ikc;
     contactStates.push_back(contact);
   }
@@ -344,7 +356,15 @@ bool ContactStateHolder::calcContactState(const std::string& instance_name, cnoi
 bool ContactStateHolder::calcOdometry(const std::string& instance_name, cnoid::ref_ptr<const cnoid::Body> prevRobot, const std::vector<ContactState>& contactStates, cnoid::BodyPtr curRobot) {
 
   std::vector<std::shared_ptr<ik_constraint2::IKConstraint> > ikc_list;
+
+  bool hasContact = false;
   for(int i=0;i<contactStates.size();i++){
+    if(contactStates[i].time == 0.0) hasContact = true;
+  }
+
+  for(int i=0;i<contactStates.size();i++){
+    if(hasContact && contactStates[i].time > 0.0) continue; // これをしないと歩くたびに下がっていく. 下方の速度が発生するため制御に影響する.
+
     std::shared_ptr<ik_constraint2::PositionConstraint> ikc = contactStates[i].ikc;
     cnoid::Isometry3 pose1 = contactStates[i].prevLink1 ? contactStates[i].prevLink1->T() * contactStates[i].localPose1 : contactStates[i].localPose1; // world系.
     cnoid::Isometry3 localPose2 = contactStates[i].prevLink2 ? contactStates[i].prevLink2->T().inverse() * pose1 : pose1; // link2 local
@@ -435,6 +455,8 @@ bool ContactStateHolder::writeOutPortData(const std::string& instance_name, cons
     ports.m_contactState_.data[i].link2 = contactStates[i].curLink2 ? VRMLToURDFLinkNameMap.find(contactStates[i].curLink2->name())->second.c_str() : "";
     ports.m_contactState_.data[i].free_x = contactStates[i].freeX;
     ports.m_contactState_.data[i].free_y = contactStates[i].freeY;
+    ports.m_contactState_.data[i].force.length(3);
+    for(int j=0;j<3;j++) ports.m_contactState_.data[i].force[j] = contactStates[i].force[j];;
   }
   ports.m_contactStateOut_.write();
 

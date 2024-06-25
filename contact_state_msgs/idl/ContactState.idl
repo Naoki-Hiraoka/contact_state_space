@@ -10,6 +10,7 @@ module contact_state_msgs
     string link2; // URDF link name. ""ならworld.
     boolean free_x; // local_pose frame
     boolean free_y; // local_pose frame
+    sequence<double, 3> force; // local_pose frame
   };
 
   struct TimedContactSeq
