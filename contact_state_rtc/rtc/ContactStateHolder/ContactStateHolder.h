@@ -103,7 +103,7 @@ protected:
   cnoid::BodyPtr prevRobot_;
   cnoid::BodyPtr curRobot_;
   std::vector<cpp_filters::FirstOrderLowPassFilter<double> > dqOdom_; // cutoffを2loopぶんにするために、passFilterのdtは常に1/2[s], cutOffは1[Hz]とする.
-  cpp_filters::FirstOrderLowPassFilter<cnoid::Vector6> odomBaseVel_ = cpp_filters::FirstOrderLowPassFilter<cnoid::Vector6>(3.5, cnoid::Vector6::Zero());
+  cpp_filters::FirstOrderLowPassFilter<cnoid::Vector6> odomBaseVel_ = cpp_filters::FirstOrderLowPassFilter<cnoid::Vector6>(10.0, cnoid::Vector6::Zero());
 
 protected:
   bool getProperty(const std::string& key, std::string& ret);
